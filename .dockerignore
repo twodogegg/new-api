@@ -1,5 +1,10 @@
 .github
 .git
+.env
+.env.*
+!.env.example
+/data
+/logs
 *.md
 .vscode
 .gitignore
