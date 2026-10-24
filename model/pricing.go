@@ -120,6 +120,13 @@ func GetModelSupportEndpointTypes(model string) []constant.EndpointType {
 }
 
 func getPricingEndpointTypesForAbility(ability AbilityWithChannel, advancedCustomConfigs map[int]*dto.AdvancedCustomConfig) []constant.EndpointType {
+	if ability.ChannelType == constant.ChannelTypeTaskPlugin {
+		channel, err := CacheGetChannel(ability.ChannelId)
+		if err != nil {
+			return nil
+		}
+		return taskPluginPricingEndpointTypes(jsplugin.DefaultRegistry.Generation(), channel, ability.Model)
+	}
 	if ability.ChannelType != constant.ChannelTypeAdvancedCustom {
 		return common.GetEndpointTypesByChannelType(ability.ChannelType, ability.Model)
 	}
@@ -127,6 +134,41 @@ func getPricingEndpointTypesForAbility(ability AbilityWithChannel, advancedCusto
 		return config.SupportedEndpointTypesForModel(ability.Model)
 	}
 	return common.GetEndpointTypesByChannelType(ability.ChannelType, ability.Model)
+}
+
+// Task Plugin channels expose only the host protocols claimed by their bound
+// plugin. They do not inherit the ordinary channel's Chat fallback.
+func taskPluginPricingEndpointTypes(generation *jsplugin.RoutingGeneration, channel *Channel, modelName string) []constant.EndpointType {
+	mappedName := modelName
+	var mapping map[string]string
+	if common.UnmarshalJsonStr(channel.GetModelMapping(), &mapping) == nil {
+		if target, cyclic := followChannelModelMapping(mapping, modelName); !cyclic && target != "" {
+			mappedName = target
+		}
+	}
+	key := channel.GetSetting().TaskPluginKey
+	endpoints := make([]constant.EndpointType, 0)
+	for _, endpoint := range []struct {
+		path string
+		kind constant.EndpointType
+	}{
+		{"/v1/videos", constant.EndpointTypeOpenAIVideo},
+		{"/v1/images/generations", constant.EndpointTypeImageGeneration},
+		{"/v1/responses", constant.EndpointTypeOpenAIResponse},
+	} {
+		matched := false
+		for _, name := range []string{modelName, mappedName} {
+			for _, binding := range generation.LookupEndpointCandidates("POST", endpoint.path, name) {
+				if binding.Plugin.Meta.Key == key {
+					matched = true
+				}
+			}
+		}
+		if matched {
+			endpoints = append(endpoints, endpoint.kind)
+		}
+	}
+	return endpoints
 }
 
 // loadPricingAdvancedCustomConfigs runs inside updatePricing while

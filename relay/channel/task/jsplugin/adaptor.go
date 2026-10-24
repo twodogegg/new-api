@@ -706,6 +706,10 @@ func (a *TaskAdaptor) hookFetcher(baseURL, proxy string) pluginruntime.Fetcher {
 }
 
 func (a *TaskAdaptor) doFetchDescriptor(baseURL, key, proxy string, descriptor requestDescriptor) (*http.Response, error) {
+	return a.doFetchDescriptorContext(context.Background(), baseURL, key, proxy, descriptor)
+}
+
+func (a *TaskAdaptor) doFetchDescriptorContext(ctx context.Context, baseURL, key, proxy string, descriptor requestDescriptor) (*http.Response, error) {
 	if err := pluginruntime.ValidateRequestURL(descriptor.URL, baseURL, a.plugin.Meta.AllowedHosts); err != nil {
 		return nil, err
 	}
@@ -727,7 +731,7 @@ func (a *TaskAdaptor) doFetchDescriptor(baseURL, key, proxy string, descriptor r
 	if method == "" {
 		method = http.MethodGet
 	}
-	req, err := http.NewRequest(method, descriptor.URL, requestBody)
+	req, err := http.NewRequestWithContext(ctx, method, descriptor.URL, requestBody)
 	if err != nil {
 		return nil, err
 	}

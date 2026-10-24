@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,7 +15,9 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay/channel/advancedcustom"
+	taskplugin "github.com/QuantumNous/new-api/relay/channel/task/jsplugin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -622,6 +625,23 @@ func fetchAdvancedCustomBalance(channel *model.Channel) (channelBalanceResult, e
 }
 
 func updateChannelBalance(channel *model.Channel) (channelBalanceResult, error) {
+	if channel.Type == constant.ChannelTypeTaskPlugin {
+		plugin, ok := jsplugin.DefaultRegistry.Get(channel.GetSetting().TaskPluginKey)
+		if !ok {
+			return channelBalanceResult{}, common.NewMessage("Task Plugin channels do not support balance queries")
+		}
+		adaptor := taskplugin.New(plugin)
+		adaptor.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType: channel.Type, ChannelBaseUrl: channel.GetBaseURL(),
+			ApiKey: channel.Key, ChannelSetting: channel.GetSetting(),
+		}})
+		balance, err := adaptor.QueryBalance(context.Background())
+		if err != nil {
+			return channelBalanceResult{}, sanitizeFetchModelsError(err, channel.Key)
+		}
+		channel.UpdateBalance(balance)
+		return channelBalanceResult{Balance: balance}, nil
+	}
 	if channel.Type == constant.ChannelTypeAdvancedCustom {
 		return fetchAdvancedCustomBalance(channel)
 	}
@@ -709,10 +729,6 @@ func UpdateChannelBalance(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if channel.Type == constant.ChannelTypeTaskPlugin {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Task Plugin channels do not support balance queries"})
-		return
-	}
 	if channel.ChannelInfo.IsMultiKey {
 		common.ApiErrorT(c, "Multi-key channels do not support balance queries")
 		return
@@ -745,6 +761,11 @@ func updateAllChannelsBalance() error {
 		}
 		if channel.ChannelInfo.IsMultiKey {
 			continue // skip multi-key channels
+		}
+		// Plugin cash balances can coexist with prepaid credits or subscriptions.
+		// Keep their manual query separate from the bulk cash-based auto-disable.
+		if channel.Type == constant.ChannelTypeTaskPlugin {
+			continue
 		}
 		// TODO: support Azure
 		//if channel.Type != common.ChannelTypeOpenAI && channel.Type != common.ChannelTypeCustom {

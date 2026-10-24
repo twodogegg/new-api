@@ -5,6 +5,7 @@
 !.env.example
 /data
 /logs
+/.local-tests
 *.md
 .vscode
 .gitignore

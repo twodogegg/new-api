@@ -6,10 +6,52 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTaskPluginPricingEndpointsRespectBoundProviderAndAlias(t *testing.T) {
+	registry := jsplugin.NewRegistry()
+	_, err := registry.RegisterFactory(`
+export const meta = {apiVersion:1,key:"video-pricing",name:"Video",version:"1.0.0",author:{name:"Test"},models:["shared-video"],fetchMode:"per_task",protocols:["openai_video"]};
+export function buildSubmitRequest(){return {};}
+export function parseSubmitResponse(){return {};}
+export function buildQueryRequest(){return {};}
+export function parseTaskResult(){return {};}
+export function listArtifacts(){return [];}
+export function buildContentRequest(){return {};}
+export const protocols = {openai_video:{decodeRequest(){return {};},render(){return {};}}};
+`, jsplugin.Options{})
+	require.NoError(t, err)
+	_, err = registry.RegisterFactory(`
+export const meta = {apiVersion:1,key:"response-pricing",name:"Response",version:"1.0.0",author:{name:"Test"},models:["shared-video"],fetchMode:"per_task",protocols:[{name:"openai_responses",supports:["background"]}]};
+export function buildSubmitRequest(){return {};}
+export function parseSubmitResponse(){return {};}
+export function buildQueryRequest(){return {};}
+export function parseTaskResult(){return {};}
+export const protocols = {openai_responses:{decodeRequest(){return {};},renderFinal(){return {};}}};
+`, jsplugin.Options{})
+	require.NoError(t, err)
+	mapping := `{"my-video":"shared-video"}`
+	channel := &Channel{Type: constant.ChannelTypeTaskPlugin, ModelMapping: &mapping}
+	for _, tc := range []struct {
+		key, model string
+		want       []constant.EndpointType
+	}{
+		{"video-pricing", "shared-video", []constant.EndpointType{constant.EndpointTypeOpenAIVideo}},
+		{"video-pricing", "my-video", []constant.EndpointType{constant.EndpointTypeOpenAIVideo}},
+		{"response-pricing", "shared-video", []constant.EndpointType{constant.EndpointTypeOpenAIResponse}},
+		{"missing-plugin", "shared-video", []constant.EndpointType{}},
+		{"video-pricing", "unknown-model", []constant.EndpointType{}},
+	} {
+		t.Run(tc.key+"/"+tc.model, func(t *testing.T) {
+			channel.SetSetting(dto.ChannelSettings{TaskPluginKey: tc.key})
+			assert.Equal(t, tc.want, taskPluginPricingEndpointTypes(registry.Generation(), channel, tc.model))
+		})
+	}
+}
 
 func resetPricingEndpointTestTables(t *testing.T) {
 	t.Helper()

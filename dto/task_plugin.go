@@ -17,6 +17,7 @@ type TaskView struct {
 	Data       any    `json:"data,omitempty"`
 	FailReason string `json:"fail_reason"`
 	FinishedAt int64  `json:"finished_at,omitempty"`
+	Model      string `json:"model,omitempty"`
 	Platform   string `json:"platform"`
 	Progress   string `json:"progress"`
 	Status     string `json:"status"`
