@@ -72,6 +72,26 @@ export function CacheTooltip({
 // ============================================================================
 
 /**
+ * Create a compact record ID column shared by usage log categories.
+ */
+export function createRecordIdColumn<T>(headerLabel: string): ColumnDef<T> {
+  return {
+    accessorKey: 'id',
+    header: headerLabel,
+    cell: ({ row }) => {
+      const id = row.getValue('id') as number
+      if (!Number.isFinite(id)) {
+        return <span className='text-muted-foreground/60 text-xs'>-</span>
+      }
+      return <span className='font-mono text-xs tabular-nums'>{id}</span>
+    },
+    enableHiding: false,
+    meta: { label: headerLabel },
+    size: 72,
+  }
+}
+
+/**
  * Create a timestamp column - compact mono style matching common logs
  */
 export function createTimestampColumn<T>(config: {

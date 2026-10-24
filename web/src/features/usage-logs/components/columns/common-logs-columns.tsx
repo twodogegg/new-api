@@ -78,6 +78,7 @@ import { LogCostDisplay } from '../log-cost-display'
 import { ModelBadge } from '../model-badge'
 import { TimingMetricsCell, StreamTpsCell } from '../timing-metrics-cell'
 import { useUsageLogsContext } from '../usage-logs-provider'
+import { createRecordIdColumn } from './column-helpers'
 
 interface DetailSegment {
   text: string
@@ -357,6 +358,7 @@ export function useCommonLogsColumns(
   const currency = useSystemConfigStore((state) => state.config.currency)
   return useMemo(() => {
     const columns: ColumnDef<UsageLog>[] = [
+      createRecordIdColumn<UsageLog>(t('ID')),
       {
         accessorKey: 'created_at',
         header: t('Time'),

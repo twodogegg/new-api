@@ -40,6 +40,7 @@ import {
   createDurationColumn,
   createChannelColumn,
   createProgressColumn,
+  createRecordIdColumn,
 } from './column-helpers'
 
 function TaskDetailsCell(props: {
@@ -90,6 +91,7 @@ export function useTaskLogsColumns(
   const { t } = useTranslation()
   return useMemo(() => {
     const columns: ColumnDef<TaskLog>[] = [
+      createRecordIdColumn<TaskLog>(t('ID')),
       {
         accessorKey: 'submit_time',
         header: t('Submit Time'),

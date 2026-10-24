@@ -97,6 +97,11 @@ function renderLogs(props: Parameters<typeof Fixture>[0] = {}) {
   )
 }
 
+it('shows the log ID in the mobile summary', () => {
+  renderLogs()
+  expect(screen.getByRole('button', { name: 'ID: 1' })).toBeVisible()
+})
+
 it('shows model mismatch evidence when tapping the mobile model badge', async () => {
   const user = userEvent.setup()
   renderLogs({

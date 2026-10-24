@@ -55,6 +55,7 @@ import {
   createChannelColumn,
   createProgressColumn,
   createFailReasonColumn,
+  createRecordIdColumn,
 } from './column-helpers'
 
 const drawingTypeIconMap: Record<string, LucideIcon> = {
@@ -87,6 +88,7 @@ export function useDrawingLogsColumns(
   const { t } = useTranslation()
   return useMemo(() => {
     const columns: ColumnDef<MidjourneyLog>[] = [
+      createRecordIdColumn<MidjourneyLog>(t('ID')),
       {
         accessorKey: 'submit_time',
         header: t('Submit Time'),
