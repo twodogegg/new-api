@@ -2,6 +2,7 @@
 // switches and retain only the selected graph before submitting to RunningHub.
 const MODEL = "minimax-h3-flash";
 const STANDARD_MODEL = "minimax-h3-standard";
+const ASSET_UPLOAD_ACTION = "asset_upload";
 const FPS = 24;
 const RATIOS = ["adaptive", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"];
 const RESOLUTIONS = { "480P": "854x480", "768P": "1344x768", "1080P": "1920x1080" };
@@ -22,7 +23,7 @@ export const meta = {
   key: "runninghub",
   name: "RunningHub MiniMax H3",
   icon: "text:RH",
-  version: "1.4.0",
+  version: "1.5.0",
   author: { name: "twodogegg", url: "https://github.com/twodogegg" },
   website: "https://www.runninghub.cn",
   baseUrl: "https://www.runninghub.cn",
@@ -34,6 +35,7 @@ export const meta = {
   fetchMode: "per_task",
   protocols: ["openai_video"],
   routes: [
+    { method: "POST", path: "/v1/h3/assets", type: "submit", decode: "uploadAsset", render: "assetUploaded", retainResult: false },
     { method: "POST", path: "/runninghub/v2/video_generation", type: "submit", decode: "createVideo", render: "videoCreated", models: [MODEL, STANDARD_MODEL] },
     { method: "GET", path: "/runninghub/v2/query/video_generation/:task_id", type: "query", render: "videoStatus" },
   ],
@@ -196,6 +198,17 @@ function activeWorkflow(workflow) {
 }
 
 export function buildSubmitRequest(ctx) {
+  if (ctx.action === ASSET_UPLOAD_ACTION) {
+    if (!Array.isArray(ctx.files) || ctx.files.length !== 1) throw new Error("exactly one file is required");
+    const file = ctx.files[0];
+    return {
+      url: ctx.baseUrl.replace(/\/+$/, "") + "/openapi/v2/media/upload/binary",
+      method: "POST",
+      headers: { Accept: "application/json", Authorization: "Bearer " + ctx.apiKey },
+      bodyType: "multipart",
+      parts: [{ name: "file", fileRef: file.ref, filename: file.filename }],
+    };
+  }
   const req = canonicalRequest(ctx, ctx.requestBody);
   const standard = (ctx.upstreamModel || ctx.model) === STANDARD_MODEL;
   const firstLast = Boolean(req.metadata.first_frame_image || req.metadata.last_frame_image);
@@ -318,12 +331,24 @@ export function buildSubmitRequest(ctx) {
 }
 
 export function extractUsage(ctx) {
+  if (ctx.action === ASSET_UPLOAD_ACTION) return null;
   if (ctx.usagePurpose === "billing_ratios") return null;
   return usage(canonicalRequest(ctx, ctx.requestBody));
 }
 
 export function parseSubmitResponse(ctx, response) {
   const body = response.body;
+  if (ctx.action === ASSET_UPLOAD_ACTION) {
+    if (!object(body) || body.code !== 0 || !object(body.data)) throw new Error("RunningHub upload failed");
+    const data = body.data;
+    if (typeof data.fileName !== "string" || !/^(api|openapi)\/[A-Za-z0-9_./-]+$/.test(data.fileName))
+      throw new Error("RunningHub upload response is missing a valid fileName");
+    return {
+      taskId: data.fileName,
+      taskData: { fileName: data.fileName, type: data.type, size: data.size },
+      immediate: { status: "SUCCESS", progress: "100%" },
+    };
+  }
   if (!object(body) || body.code !== 0 || !object(body.data))
     throw new Error("RunningHub submission failed: " + ((object(body) && body.msg) || "invalid response"));
   const data = body.data;
@@ -400,6 +425,30 @@ export function buildContentRequest(ctx) {
 }
 
 export const native = {
+  uploadAsset: function (ctx) {
+    if (!ctx.body || ctx.body.kind !== "multipart") throw new Error("multipart body required");
+    if (!Array.isArray(ctx.body.files) || ctx.body.files.length !== 1) throw new Error("exactly one file is required");
+    const file = ctx.body.files[0];
+    if (file.field !== "file") throw new Error("file field is required");
+    return {
+      kind: "submit",
+      model: MODEL,
+      action: ASSET_UPLOAD_ACTION,
+      requestBody: { fileRef: file.ref, filename: file.filename, mimeType: file.mimeType, size: file.size },
+    };
+  },
+  assetUploaded: function (_ctx, task) {
+    const data = object(task && task.data) ? task.data : {};
+    if (typeof data.fileName !== "string" || !/^(api|openapi)\/[A-Za-z0-9_./-]+$/.test(data.fileName))
+      throw new Error("RunningHub upload did not return a valid fileName");
+    return {
+      id: data.fileName,
+      fileName: data.fileName,
+      type: typeof data.type === "string" ? data.type : "",
+      size: typeof data.size === "string" || typeof data.size === "number" ? data.size : "",
+      expires_in: 86400,
+    };
+  },
   createVideo: function (ctx) {
     if (!ctx.body || ctx.body.kind !== "json") throw new Error("JSON body required");
     const body = ctx.body.value;
