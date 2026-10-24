@@ -171,7 +171,6 @@ function TaskLogsCard<TData>({
       </div>
 
       <div className='grid grid-cols-2 gap-1.5'>
-        <SummaryField label={t('ID')} cell={cells.get('id')} />
         {TASK_MOBILE_SUMMARY_FIELDS.map((field) => (
           <SummaryField
             key={field.id}
@@ -209,7 +208,6 @@ function DrawingLogsCard<TData>({
       </div>
 
       <div className='grid grid-cols-2 gap-1.5'>
-        <SummaryField label={t('ID')} cell={cells.get('id')} />
         <SummaryField label={t('Submit Time')} cell={submitTimeCell} />
         <SummaryField
           label={t('Channel')}

@@ -43,7 +43,6 @@ import { StreamTpsCell, TimingMetricsCell } from './timing-metrics-cell'
 import { useUsageLogsContext } from './usage-logs-provider'
 
 type FieldName =
-  | 'id'
   | 'model'
   | 'cost'
   | 'user'
@@ -78,11 +77,6 @@ export function CommonLogMobileCard<TData>(props: {
       ? other.user_group_ratio
       : other?.group_ratio
   const fields: Record<FieldName, LogField> = {
-    id: {
-      label: t('ID'),
-      value: String(log.id),
-      visible: props.cells.has('id'),
-    },
     model: {
       label: t('Model'),
       value: model.name,
@@ -128,7 +122,7 @@ export function CommonLogMobileCard<TData>(props: {
     selected?.visible && (!selected.sensitive || context.sensitiveVisible)
       ? selected
       : undefined
-  const metadata: FieldName[] = ['id', 'user', 'channel', 'token', 'group']
+  const metadata: FieldName[] = ['user', 'channel', 'token', 'group']
   const visibleMetadata = metadata.filter((id) => fields[id].visible)
   const costCell = props.cells.get('quota')
   const contentCell = props.cells.get('content')
@@ -268,7 +262,7 @@ export function CommonLogMobileCard<TData>(props: {
                     field.label
                   )}
                 </span>
-                {!field.sensitive || context.sensitiveVisible ? (
+                {context.sensitiveVisible ? (
                   <Button
                     variant='ghost'
                     aria-label={`${field.label}: ${field.value}`}
