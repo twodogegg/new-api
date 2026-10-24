@@ -23,7 +23,7 @@ export const meta = {
   key: "runninghub",
   name: "RunningHub MiniMax H3",
   icon: "text:RH",
-  version: "1.5.1",
+  version: "1.5.0",
   author: { name: "twodogegg", url: "https://github.com/twodogegg" },
   website: "https://www.runninghub.cn",
   baseUrl: "https://www.runninghub.cn",
@@ -111,21 +111,10 @@ function mediaList(value, name, maximum) {
   });
 }
 
-function workflowModel(ctx) {
-  const model = ctx.upstreamModel || ctx.model;
-  if (![MODEL, STANDARD_MODEL].includes(model)) throw new Error("unsupported RunningHub model");
-  // A declared H3 model is already a concrete workflow variant. Treating an
-  // accidental channel mapping to the other variant as a normal alias would
-  // silently send Flash requests through the Standard branch (or vice versa).
-  if ([MODEL, STANDARD_MODEL].includes(ctx.model) && ctx.upstreamModel && ctx.upstreamModel !== ctx.model) {
-    throw new Error("RunningHub H3 model mapping cannot switch Flash and Standard variants");
-  }
-  return model;
-}
-
 function canonicalRequest(ctx, req) {
   if (!object(req)) throw new Error("request body must be an object");
-  const model = workflowModel(ctx);
+  const model = ctx.upstreamModel || ctx.model;
+  if (![MODEL, STANDARD_MODEL].includes(model)) throw new Error("unsupported RunningHub model");
   if (typeof req.prompt !== "string" || !req.prompt.trim()) throw new Error("prompt is required");
   if (req.metadata !== undefined && !object(req.metadata)) throw new Error("metadata must be an object");
   const metadata = req.metadata || {};
@@ -221,7 +210,7 @@ export function buildSubmitRequest(ctx) {
     };
   }
   const req = canonicalRequest(ctx, ctx.requestBody);
-  const standard = workflowModel(ctx) === STANDARD_MODEL;
+  const standard = (ctx.upstreamModel || ctx.model) === STANDARD_MODEL;
   const firstLast = Boolean(req.metadata.first_frame_image || req.metadata.last_frame_image);
   const workflow = utils.json.clone(WORKFLOW);
   workflow["400"].inputs.value = firstLast;

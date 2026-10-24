@@ -284,13 +284,6 @@ func TestRunningHubStandardWorkflowAndLimits(t *testing.T) {
 	require.Len(t, examples, 2)
 	flashSchema, _ := plugin.Meta.UsageForModel("minimax-h3-flash")
 	assert.Equal(t, []string{"480P", "768P", "1080P"}, flashSchema["resolution"].Enum)
-	t.Run("declared variants cannot be remapped silently", func(t *testing.T) {
-		_, err := plugin.Engine.Call(t.Context(), "buildSubmitRequest", map[string]any{
-			"model": "minimax-h3-flash", "upstreamModel": standard, "baseUrl": "https://www.runninghub.cn",
-			"apiKey": "test-key", "requestBody": map[string]any{"prompt": "a cat", "size": "480P"},
-		})
-		require.ErrorContains(t, err, "cannot switch Flash and Standard variants")
-	})
 
 	for _, size := range []string{"480P", "480x854", "480x480", "768P", "768x1344", "768x768", "1080P", "1920x1080", "1080x1920", "1080x1080"} {
 		t.Run(size, func(t *testing.T) {
