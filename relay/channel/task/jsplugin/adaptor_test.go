@@ -2647,3 +2647,84 @@ func TestTaskAdaptorChainsSunoBatchFetchThroughNewAPIUpstream(t *testing.T) {
 	assert.Equal(t, "SUCCESS", results["task_up_public"].TaskInfo.Status)
 	assert.Equal(t, []string{"POST /suno/submit/MUSIC", "POST /suno/fetch"}, seen)
 }
+
+func TestVideoPluginChannelParamOverride(t *testing.T) {
+	source := `
+export const meta = {apiVersion:1,key:"override-video",name:"Override Video",version:"1.0.0",author:{name:"Test"},models:["m"],fetchMode:"per_task",protocols:["openai_video"],usageSchema:{seconds:{type:"number",unit:"second"}}};
+export const protocols = {openai_video:{decodeRequest:function(ctx){if(ctx.body.value.seconds > 15) throw new Error("seconds out of range"); return {kind:"submit",model:ctx.model,requestBody:ctx.body.value};},render:function(){return {};}}};
+export function buildSubmitRequest(ctx){return {url:ctx.baseUrl+"/submit",method:"POST",body:ctx.requestBody};}
+export function extractUsage(ctx){return {seconds:ctx.requestBody.seconds};}
+export function listArtifacts(){return []} export function buildContentRequest(){return {url:"https://provider.example"}}
+export function parseSubmitResponse(){return {taskId:"one"}} export function buildQueryRequest(){return {}} export function parseTaskResult(){return {status:"SUCCESS"}}
+`
+	plugin, err := pluginruntime.NewRegistry().Register(source, pluginruntime.Options{})
+	require.NoError(t, err)
+	original := map[string]any{"model": "m", "resolution": "768", "seconds": float64(5)}
+	protocolContext := pluginruntime.ProtocolRequestContext{
+		RouteRequestContext: pluginruntime.RouteRequestContext{Body: map[string]any{"kind": "json", "value": original}, RequestBody: original},
+		Protocol:            "openai_video", Model: "m",
+	}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
+	c.Set(pluginruntime.ContextKeyPinnedEndpoint, pluginruntime.PinnedEndpoint{Plugin: plugin, Protocol: "openai_video", Model: "m"})
+	c.Set(pluginruntime.ContextKeyProtocolRequest, protocolContext)
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://provider.example", ParamOverride: map[string]any{"operations": []any{map[string]any{"mode": "set", "path": "resolution", "value": "480"}, map[string]any{"mode": "set", "path": "seconds", "value": 7}}}}, TaskRelayInfo: &relaycommon.TaskRelayInfo{}, OriginModelName: "m"}
+	adaptor := New(plugin)
+	adaptor.Init(info)
+
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	body, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	data, err := io.ReadAll(body)
+	require.NoError(t, err)
+	var sent map[string]any
+	require.NoError(t, common.Unmarshal(data, &sent))
+	assert.Equal(t, "480", sent["resolution"])
+	assert.Equal(t, float64(7), sent["seconds"])
+	facts, err := adaptor.ExtractUsageFactsValidated(c, info)
+	require.NoError(t, err)
+	assert.Equal(t, float64(7), facts["seconds"])
+	assert.Equal(t, "768", original["resolution"])
+	assert.Equal(t, float64(5), original["seconds"])
+
+	// A retry starts from the client request, not the previous channel's override.
+	info.ParamOverride = map[string]any{"resolution": "768"}
+	adaptor = New(plugin)
+	adaptor.Init(info)
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	taskRequest := c.MustGet("task_request").(map[string]any)
+	assert.Equal(t, "768", taskRequest["resolution"])
+	assert.Equal(t, float64(5), taskRequest["seconds"])
+
+	info.ParamOverride = map[string]any{"seconds": 100}
+	adaptor = New(plugin)
+	adaptor.Init(info)
+	invalid := adaptor.ValidateRequestAndSetAction(c, info)
+	require.NotNil(t, invalid)
+	assert.Equal(t, http.StatusBadRequest, invalid.StatusCode)
+
+	info.ParamOverride = map[string]any{"model": "different"}
+	taskErr := adaptor.ValidateRequestAndSetAction(c, info)
+	require.NotNil(t, taskErr)
+	assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
+}
+
+func TestVideoPluginOverridePreservesMultipartFiles(t *testing.T) {
+	files := []map[string]any{{"ref": "request_file:input_reference", "field": "input_reference"}}
+	fields := map[string][]string{"model": {"m"}, "seconds": {"5"}, "tag": {"a", "b"}}
+	request := pluginruntime.ProtocolRequestContext{
+		RouteRequestContext: pluginruntime.RouteRequestContext{Body: map[string]any{"kind": "multipart", "fields": fields, "files": files}, Files: files},
+		Protocol:            "openai_video", Model: "m",
+	}
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ParamOverride: map[string]any{"seconds": 7, "resolution": "480"}, UpstreamModelName: "upstream"}, OriginModelName: "m"}
+	result, err := applyVideoProtocolParamOverride(request, info)
+	require.NoError(t, err)
+	body := result.Body.(map[string]any)
+	actual := body["fields"].(map[string][]string)
+	assert.Equal(t, []string{"m"}, actual["model"])
+	assert.Equal(t, []string{"7"}, actual["seconds"])
+	assert.Equal(t, []string{"480"}, actual["resolution"])
+	assert.Equal(t, []string{"a", "b"}, actual["tag"])
+	assert.Equal(t, files, body["files"])
+	assert.Equal(t, []string{"5"}, fields["seconds"])
+}

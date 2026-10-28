@@ -129,6 +129,19 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 		if pinned, ok := pinnedValue.(pluginruntime.PinnedEndpoint); ok && pinned.Plugin == a.plugin {
 			if protocolValue, present := c.Get(pluginruntime.ContextKeyProtocolRequest); present {
 				if protocolContext, valid := protocolValue.(pluginruntime.ProtocolRequestContext); valid {
+					if pinned.Protocol == "openai_video" {
+						var err error
+						protocolContext, err = applyVideoProtocolParamOverride(protocolContext, info)
+						if err != nil {
+							taskErr := service.TaskErrorWrapperLocal(err, "channel_param_override_invalid", http.StatusBadRequest)
+							taskErr.NoRetry = true
+							if fixed, ok := relaycommon.AsParamOverrideReturnError(err); ok {
+								taskErr.Code, taskErr.Message = fixed.Code, fixed.Message
+								taskErr.StatusCode, taskErr.NoRetry = fixed.StatusCode, fixed.SkipRetry
+							}
+							return taskErr
+						}
+					}
 					resolvedValue, requestBodyText, callErr := a.plugin.Engine.CallPathWithMemberJSON(
 						context.WithoutCancel(c.Request.Context()), 0, a.plugin.Meta.JSONTextMember("requestBody"),
 						"protocols", []string{pinned.Protocol, "decodeRequest"}, protocolContext.JSValueFor(a.plugin.Meta),
