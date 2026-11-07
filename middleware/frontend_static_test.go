@@ -104,3 +104,34 @@ func TestServeFrontendFilesCompressesEachFileOnce(t *testing.T) {
 	assert.Equal(t, http.StatusTeapot, missing.Code)
 	assert.Equal(t, "fallback", missing.Body.String())
 }
+
+func TestCacheHeadersDistinguishContentHashedAssets(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.NoRoute(Cache(), func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	const immutable = "public, max-age=31536000, immutable"
+	testCases := []struct {
+		name         string
+		target       string
+		cacheControl string
+		cdnControl   string
+	}{
+		{"root page", "/", "no-cache", ""},
+		{"hashed script", "/static/js/index.0f1e757955.js", immutable, immutable},
+		{"hashed stylesheet", "/static/css/index.a94f777f71.css", immutable, immutable},
+		{"hashed font", "/static/font/KaTeX_AMS-Regular.a79f1c3119.woff2", immutable, immutable},
+		{"unhashed script", "/static/js/app.js", "max-age=604800", ""},
+		{"unhashed asset", "/favicon.ico", "max-age=604800", ""},
+		{"page route", "/dashboard", "max-age=604800", ""},
+	}
+	for _, testCase := range testCases {
+		recorder := performFrontendRequest(router, http.MethodGet, testCase.target, "")
+		require.Equal(t, http.StatusOK, recorder.Code, testCase.name)
+		assert.Equal(t, testCase.cacheControl, recorder.Header().Get("Cache-Control"), testCase.name)
+		assert.Equal(t, testCase.cdnControl, recorder.Header().Get("CDN-Cache-Control"), testCase.name)
+		assert.NotEmpty(t, recorder.Header().Get("Cache-Version"), testCase.name)
+	}
+}
