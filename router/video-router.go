@@ -12,6 +12,7 @@ func SetVideoRouter(router *gin.Engine) {
 	videoSharedRouter.Use(middleware.RouteTag("relay"))
 	videoSharedRouter.Use(middleware.TokenAuth())
 	videoSharedRouter.Use(middleware.SystemPerformanceCheck())
+	videoSharedRouter.DELETE("/videos/:video_id", controller.CancelLocalH3VideoTask)
 	videoSharedRouter.POST(
 		"/video/generations",
 		middleware.PinTaskPluginEndpoint(),

@@ -162,12 +162,18 @@ func ApplyChannelPin(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError
 			if task == nil {
 				continue
 			}
+			var facts map[string]any
+			if task.PrivateData.BillingContext != nil && task.PrivateData.BillingContext.TieredSnapshot != nil {
+				facts = task.PrivateData.BillingContext.TieredSnapshot.UsageFacts
+			}
 			refs = append(refs, relaycommon.OriginTaskRef{
 				TaskID:         task.TaskID,
 				UpstreamTaskID: task.GetUpstreamTaskID(),
 				Action:         task.Action,
 				Status:         string(task.Status),
 				Data:           append([]byte(nil), task.Data...),
+				Model:          task.Properties.OriginModelName,
+				UsageFacts:     facts,
 			})
 		}
 		info.OriginTasks = refs

@@ -886,6 +886,7 @@ func TestUpdateVideoSingleTaskPollClassification(t *testing.T) {
 		parseErr      error
 		priorFailures int
 		priorState    string
+		initialStatus model.TaskStatus
 		maxFailures   int
 		wantStatus    model.TaskStatus
 		wantFailures  int
@@ -894,6 +895,30 @@ func TestUpdateVideoSingleTaskPollClassification(t *testing.T) {
 		wantState     string
 		wantUnchanged bool
 	}{
+		{
+			name:          "confirmed cancellation retains charge",
+			statusCode:    http.StatusOK,
+			initialStatus: model.TaskStatusCancelPending,
+			parse:         &relaycommon.TaskInfo{Status: model.TaskStatusFailure, Reason: "cancelled by user"},
+			wantStatus:    model.TaskStatusFailure,
+			wantReason:    "cancelled by user",
+		},
+		{
+			name:          "failure during cancellation still refunds",
+			statusCode:    http.StatusOK,
+			initialStatus: model.TaskStatusCancelPending,
+			parse:         &relaycommon.TaskInfo{Status: model.TaskStatusFailure, Reason: "generation failed"},
+			wantStatus:    model.TaskStatusFailure,
+			wantReason:    "generation failed",
+			wantRefund:    true,
+		},
+		{
+			name:          "running task retains pending cancellation",
+			statusCode:    http.StatusOK,
+			initialStatus: model.TaskStatusCancelPending,
+			parse:         &relaycommon.TaskInfo{Status: model.TaskStatusInProgress},
+			wantStatus:    model.TaskStatusCancelPending,
+		},
 		{
 			name:          "404 fails immediately and refunds",
 			statusCode:    http.StatusNotFound,
@@ -980,6 +1005,9 @@ func TestUpdateVideoSingleTaskPollClassification(t *testing.T) {
 			}
 
 			task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+			if testCase.initialStatus != "" {
+				task.Status = testCase.initialStatus
+			}
 			task.TaskID = "task_poll_class"
 			task.PrivateData.UpstreamTaskID = "upstream_poll_class"
 			task.PrivateData.PollFailures = testCase.priorFailures

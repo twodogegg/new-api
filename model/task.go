@@ -21,7 +21,7 @@ func (t TaskStatus) ToVideoStatus() string {
 	switch t {
 	case TaskStatusNotStart, TaskStatusQueued, TaskStatusSubmitted:
 		status = dto.VideoStatusQueued
-	case TaskStatusInProgress:
+	case TaskStatusInProgress, TaskStatusCancelPending:
 		status = dto.VideoStatusInProgress
 	case TaskStatusSuccess:
 		status = dto.VideoStatusCompleted
@@ -34,13 +34,14 @@ func (t TaskStatus) ToVideoStatus() string {
 }
 
 const (
-	TaskStatusNotStart   TaskStatus = "NOT_START"
-	TaskStatusSubmitted             = "SUBMITTED"
-	TaskStatusQueued                = "QUEUED"
-	TaskStatusInProgress            = "IN_PROGRESS"
-	TaskStatusFailure               = "FAILURE"
-	TaskStatusSuccess               = "SUCCESS"
-	TaskStatusUnknown               = "UNKNOWN"
+	TaskStatusNotStart      TaskStatus = "NOT_START"
+	TaskStatusSubmitted                = "SUBMITTED"
+	TaskStatusQueued                   = "QUEUED"
+	TaskStatusInProgress               = "IN_PROGRESS"
+	TaskStatusCancelPending            = "CANCEL_PENDING"
+	TaskStatusFailure                  = "FAILURE"
+	TaskStatusSuccess                  = "SUCCESS"
+	TaskStatusUnknown                  = "UNKNOWN"
 )
 
 // TaskRefundLegacyCutoff separates tasks created before timeout refunds were

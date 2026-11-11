@@ -109,7 +109,7 @@ func sweepTimedOutTasks(ctx context.Context) {
 			continue
 		}
 		timedOutCount++
-		if !isLegacy && task.Quota != 0 {
+		if !isLegacy && oldStatus != model.TaskStatusCancelPending && task.Quota != 0 {
 			RefundTaskQuota(ctx, task, reason)
 		}
 	}
@@ -569,6 +569,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	shouldFinalizeBilling := false
 
 	task.Status = parsedStatus
+	if snap.Status == model.TaskStatusCancelPending && isNonTerminalPollStatus(parsedStatus) {
+		task.Status = model.TaskStatusCancelPending
+	}
 	switch parsedStatus {
 	case model.TaskStatusSubmitted:
 		task.Progress = taskcommon.ProgressSubmitted
@@ -631,6 +634,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 
 	if shouldFinalizeBilling {
+		if snap.Status == model.TaskStatusCancelPending && task.Status == model.TaskStatusFailure && task.FailReason == "cancelled by user" {
+			return nil
+		}
 		finalizeTerminalTask(ctx, adaptor, task, taskResult)
 	}
 
@@ -797,6 +803,11 @@ func recordPollFailure(ctx context.Context, adaptor TaskPollingAdaptor, task *mo
 		logger.LogWarn(ctx, common.LogText("task %s poll %s (failures=%d, http=%d): %s", task.TaskID, class, task.PrivateData.PollFailures, statusCode, detail))
 	}
 	if giveUp {
+		if fromStatus == model.TaskStatusCancelPending {
+			task.PrivateData.PollFailures = constant.TaskPollMaxFailures
+			_, err := task.UpdateWithStatus(fromStatus)
+			return err
+		}
 		return failTaskFromPoll(ctx, adaptor, task, fromStatus, "Failed to query the upstream task status")
 	}
 	if _, err := task.UpdateWithStatus(fromStatus); err != nil {
@@ -819,6 +830,10 @@ func recordPollFailureForTasks(ctx context.Context, adaptor TaskPollingAdaptor, 
 }
 
 func failTaskFromPoll(ctx context.Context, adaptor TaskPollingAdaptor, task *model.Task, fromStatus model.TaskStatus, reason string) error {
+	if fromStatus == model.TaskStatusCancelPending {
+		logger.LogWarn(ctx, common.LogText("Cancellation status is unresolved for task %s: %s", task.TaskID, reason))
+		return nil
+	}
 	now := time.Now().Unix()
 	task.Status = model.TaskStatusFailure
 	task.Progress = taskcommon.ProgressComplete

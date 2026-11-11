@@ -249,7 +249,8 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 func (a *TaskAdaptor) EstimateBillingValidated(c *gin.Context, info *relaycommon.RelayInfo) (map[string]float64, error) {
 	usageContext := a.submitContext(c, info)
 	usageContext["usagePurpose"] = "billing_ratios"
-	return a.usageRatios(c.Request.Context(), []string{info.UpstreamModelName, info.OriginModelName}, "extractUsage", usageContext)
+	fetchContext := pluginruntime.WithFetcher(c.Request.Context(), a.hookFetcher(info.ChannelBaseUrl, info.ChannelSetting.Proxy))
+	return a.usageRatios(fetchContext, []string{info.UpstreamModelName, info.OriginModelName}, "extractUsage", usageContext)
 }
 
 func (a *TaskAdaptor) ExtractUsageFacts(c *gin.Context, info *relaycommon.RelayInfo) map[string]any {
@@ -267,7 +268,8 @@ func (a *TaskAdaptor) ExtractUsageFactsValidated(c *gin.Context, info *relaycomm
 	}
 	usageContext := a.submitContext(c, info)
 	usageContext["usagePurpose"] = "facts"
-	value, err := a.plugin.Engine.Call(c.Request.Context(), "extractUsage", usageContext)
+	fetchContext := pluginruntime.WithFetcher(c.Request.Context(), a.hookFetcher(info.ChannelBaseUrl, info.ChannelSetting.Proxy))
+	value, err := a.plugin.Engine.Call(fetchContext, "extractUsage", usageContext)
 	if err != nil {
 		return nil, fmt.Errorf("plugin usage hook failed")
 	}
@@ -1819,6 +1821,8 @@ func (a *TaskAdaptor) submitContext(c *gin.Context, info *relaycommon.RelayInfo)
 				"action":         ref.Action,
 				"status":         ref.Status,
 				"data":           data,
+				"model":          ref.Model,
+				"usageFacts":     ref.UsageFacts,
 			})
 		}
 		ctx["originTasks"] = originTasks
