@@ -638,23 +638,6 @@ func CompilePlugin(source string, options Options) (*LoadedPlugin, error) {
 	if artifactHooks["listArtifacts"] != artifactHooks["buildContentRequest"] {
 		return nil, fmt.Errorf("plugin %s must export listArtifacts and buildContentRequest together", meta.Key)
 	}
-	balanceHooks := make(map[string]bool, 2)
-	for _, hook := range []string{"buildBalanceRequest", "parseBalanceResponse"} {
-		if !engine.HasExport(hook) {
-			continue
-		}
-		callable, callableErr := engine.HasCallablePath(context.Background(), hook)
-		if callableErr != nil {
-			return nil, callableErr
-		}
-		if !callable {
-			return nil, fmt.Errorf("plugin %s export %q is not a function", meta.Key, hook)
-		}
-		balanceHooks[hook] = true
-	}
-	if balanceHooks["buildBalanceRequest"] != balanceHooks["parseBalanceResponse"] {
-		return nil, fmt.Errorf("plugin %s must export buildBalanceRequest and parseBalanceResponse together", meta.Key)
-	}
 	for _, route := range meta.Routes {
 		for kind, member := range map[string]string{"decode": route.Decode, "render": route.Render} {
 			if member == "" {
