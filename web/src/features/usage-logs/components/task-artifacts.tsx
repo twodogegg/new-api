@@ -139,7 +139,7 @@ function LegacyAudioPreview(props: { taskId: string }) {
   )
 }
 
-function ArtifactMedia(props: {
+export function ArtifactMedia(props: {
   artifact: TaskArtifact
   mediaUrl: string
   onError: () => void
@@ -302,7 +302,7 @@ interface TaskArtifactsProps {
   emptyContent?: (legacyContentUrl?: string) => React.ReactNode
 }
 
-function TaskArtifacts(props: TaskArtifactsProps) {
+export function TaskArtifacts(props: TaskArtifactsProps) {
   const { t } = useTranslation()
   const artifactsQuery = useQuery({
     queryKey: ['usage-logs', 'task-artifacts', props.taskId],

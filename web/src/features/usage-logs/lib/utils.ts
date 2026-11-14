@@ -183,6 +183,19 @@ export function buildApiParams(config: {
   const params: GetLogsParams = {
     p: page,
     page_size: pageSize,
+    ...(searchParams.contentKeyword
+      ? { content_keyword: String(searchParams.contentKeyword) }
+      : {}),
+    ...(searchParams.requestKind
+      ? { request_kind: String(searchParams.requestKind) }
+      : {}),
+    ...(searchParams.bodyState
+      ? { body_state: String(searchParams.bodyState) }
+      : {}),
+    ...(searchParams.conversationId
+      ? { conversation_id: String(searchParams.conversationId) }
+      : {}),
+    ...(searchParams.runId ? { run_id: String(searchParams.runId) } : {}),
     ...(searchParams.type ? { type: processType(searchParams.type) } : {}),
     ...(searchParams.model ? { model_name: String(searchParams.model) } : {}),
     ...(searchParams.token ? { token_name: String(searchParams.token) } : {}),
@@ -271,7 +284,15 @@ export async function fetchLogsByCategory(
       ? { mj_id: searchParams.filter as string | undefined }
       : {}),
     ...(logCategory === 'task'
-      ? { task_id: searchParams.filter as string | undefined }
+      ? {
+          task_id: searchParams.filter as string | undefined,
+          content_keyword: searchParams.contentKeyword,
+          request_kind: searchParams.requestKind,
+          body_state: searchParams.bodyState,
+          conversation_id: searchParams.conversationId,
+          run_id: searchParams.runId,
+          status: searchParams.taskStatus,
+        }
       : {}),
   }
 

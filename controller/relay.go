@@ -71,6 +71,7 @@ func geminiRelayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewA
 }
 
 func Relay(c *gin.Context, relayFormat types.RelayFormat) {
+	defer service.BeginRequestRecord(c, string(relayFormat))()
 
 	requestId := c.GetString(common.RequestIdKey)
 	//group := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
@@ -364,6 +365,7 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 }
 
 func RelayMidjourney(c *gin.Context) {
+	defer service.BeginRequestRecord(c, "mj_proxy")()
 	policy := service.RequestPolicy(c)
 	defer func() {
 		if policy.Attempts > 0 && !policy.Successful {
@@ -537,6 +539,7 @@ type taskSubmissionOutcome struct {
 }
 
 func RelayTask(c *gin.Context) {
+	defer service.BeginRequestRecord(c, "task")()
 	var relayInfo *relaycommon.RelayInfo
 	var taskErr *taskdto.TaskError
 	// Registered first so that it runs last: the request plugins' report
@@ -870,10 +873,12 @@ func executeTaskSubmissionWith(
 		return nil, taskErr
 	}
 	durable = true
+	service.AttachRequestRecordTask(c, task)
 	requestplugin.TaskCreated(c)
 	if immediateTerminal {
 		// Reported once settled, whatever the settlement did.
 		defer requestplugin.ReportTask(task)
+		defer service.RecordTaskCompletion(task)
 	}
 	stage = "settle"
 	diagnostics.durable(task)

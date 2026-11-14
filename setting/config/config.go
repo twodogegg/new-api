@@ -38,6 +38,23 @@ func (cm *ConfigManager) Get(name string) any {
 	return cm.configs[name]
 }
 
+// Snapshot holds the same lock as runtime updates while copying a setting.
+func (cm *ConfigManager) Snapshot(name string, target any) error {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+	data, err := common.Marshal(cm.configs[name])
+	if err != nil {
+		return err
+	}
+	return common.Unmarshal(data, target)
+}
+
+func (cm *ConfigManager) Update(name string, values map[string]string) error {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	return updateConfigFromMap(cm.configs[name], values)
+}
+
 // LoadFromDB 从数据库加载配置
 func (cm *ConfigManager) LoadFromDB(options map[string]string) error {
 	cm.mutex.Lock()

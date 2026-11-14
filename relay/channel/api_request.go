@@ -567,7 +567,9 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	}
 
 	common2.SetContextKey(c, appconstant.ContextKeyUpstreamRequestOrigin, req.URL.Scheme+"://"+req.URL.Host)
+	captureResponse := service.CaptureRequestRecordUpstream(c, req)
 	resp, err := relayClient.Do(req)
+	captureResponse(resp)
 	if err != nil {
 		// A url.Error quotes the request URL, whose query may carry a
 		// credential: log its operation, the host and the cause only.

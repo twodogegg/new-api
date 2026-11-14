@@ -265,6 +265,7 @@ type SyncTaskQueryParams struct {
 	StartTimestamp int64
 	EndTimestamp   int64
 	UserIDs        []int
+	RecordFilter   *RequestRecordFilter
 }
 
 func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) *Task {
@@ -320,6 +321,9 @@ func TaskGetAllUserTask(userId int, startIdx int, num int, queryParams SyncTaskQ
 
 	// 初始化查询构建器
 	query := DB.Where("user_id = ?", userId)
+	if queryParams.RecordFilter != nil {
+		query = query.Where("EXISTS (?)", queryParams.RecordFilter.apply(DB.Model(&RequestRecord{}).Select("1")).Where("request_records.task_id = tasks.task_id AND request_records.user_id = tasks.user_id"))
+	}
 
 	if queryParams.TaskID != "" {
 		query = query.Where("task_id = ?", queryParams.TaskID)
@@ -358,6 +362,9 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 
 	// 初始化查询构建器
 	query := DB
+	if queryParams.RecordFilter != nil {
+		query = query.Where("EXISTS (?)", queryParams.RecordFilter.apply(DB.Model(&RequestRecord{}).Select("1")).Where("request_records.task_id = tasks.task_id AND request_records.user_id = tasks.user_id"))
+	}
 
 	// 添加过滤条件
 	if queryParams.ChannelID != "" {
@@ -619,6 +626,9 @@ type TaskQuotaUsage struct {
 func TaskCountAllTasks(queryParams SyncTaskQueryParams) int64 {
 	var total int64
 	query := DB.Model(&Task{})
+	if queryParams.RecordFilter != nil {
+		query = query.Where("EXISTS (?)", queryParams.RecordFilter.apply(DB.Model(&RequestRecord{}).Select("1")).Where("request_records.task_id = tasks.task_id AND request_records.user_id = tasks.user_id"))
+	}
 	if queryParams.ChannelID != "" {
 		query = query.Where("channel_id = ?", queryParams.ChannelID)
 	}
@@ -654,6 +664,9 @@ func TaskCountAllTasks(queryParams SyncTaskQueryParams) int64 {
 func TaskCountAllUserTask(userId int, queryParams SyncTaskQueryParams) int64 {
 	var total int64
 	query := DB.Model(&Task{}).Where("user_id = ?", userId)
+	if queryParams.RecordFilter != nil {
+		query = query.Where("EXISTS (?)", queryParams.RecordFilter.apply(DB.Model(&RequestRecord{}).Select("1")).Where("request_records.task_id = tasks.task_id AND request_records.user_id = tasks.user_id"))
+	}
 	if queryParams.TaskID != "" {
 		query = query.Where("task_id = ?", queryParams.TaskID)
 	}

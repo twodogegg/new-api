@@ -339,6 +339,14 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/export", middleware.AdminAuth(), controller.ExportAllLogs)
 		logRoute.GET("/self/export", middleware.UserAuth(), controller.ExportUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
+		recordRoute := apiRouter.Group("/request-record", middleware.UserAuth(), middleware.DisableCache())
+		{
+			recordRoute.GET("/lookup", controller.LookupRequestRecord)
+			recordRoute.GET("/list", controller.GetRelatedRequestRecords)
+			recordRoute.GET("/storage", middleware.RootAuth(), controller.GetRequestRecordingStatus)
+			recordRoute.GET("/:id", controller.GetRequestRecordDetail)
+			recordRoute.GET("/:id/media/:blob", controller.GetRequestRecordMedia)
+		}
 
 		systemTaskRoute := apiRouter.Group("/system-task")
 		systemTaskRoute.Use(middleware.RootAuth())
@@ -393,6 +401,7 @@ func SetApiRouter(router *gin.Engine) {
 			taskRoute.GET("/self", middleware.UserAuth(), controller.GetUserTask)
 			taskRoute.GET("", middleware.AdminAuth(), controller.GetAllTask)
 			taskRoute.GET("/:task_id/artifacts", middleware.UserAuth(), controller.GetDashboardTaskArtifacts)
+			taskRoute.GET("/:task_id/records", middleware.UserAuth(), controller.GetTaskRequestRecords)
 		}
 
 		vendorRoute := apiRouter.Group("/vendors")

@@ -27,10 +27,13 @@ import {
 
 const logTypeValues = ['0', '1', '2', '3', '4', '5', '6', '7'] as const
 const logTypeSearchSchema = z
-  .preprocess((value) => {
-    if (value == null || value === '') return undefined
-    return Array.isArray(value) ? value : [value]
-  }, z.array(z.enum(logTypeValues)).optional())
+  .preprocess(
+    (value) => {
+      if (value == null || value === '') return undefined
+      return Array.isArray(value) ? value : [value]
+    },
+    z.array(z.enum(logTypeValues)).optional()
+  )
   .catch([])
 
 const usageLogsSearchSchema = z.object({
@@ -45,6 +48,18 @@ const usageLogsSearchSchema = z.object({
   username: z.string().optional().catch(''),
   requestId: z.string().optional().catch(''),
   upstreamRequestId: z.string().optional().catch(''),
+  contentKeyword: z.string().max(512).optional().catch(''),
+  requestKind: z
+    .enum(['llm', 'image', 'video', 'audio', 'task', ''])
+    .optional()
+    .catch(''),
+  bodyState: z
+    .enum(['available', 'truncated', 'expired', ''])
+    .optional()
+    .catch(''),
+  conversationId: z.string().optional().catch(''),
+  runId: z.string().optional().catch(''),
+  taskStatus: z.string().optional().catch(''),
   startTime: z.number().optional(),
   endTime: z.number().optional(),
 })

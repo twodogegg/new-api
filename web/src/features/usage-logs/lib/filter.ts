@@ -50,6 +50,11 @@ export function buildSearchParams(
       const commonFilters = filters as CommonLogFilters
       return {
         ...baseParams,
+        contentKeyword: commonFilters.contentKeyword,
+        requestKind: commonFilters.requestKind,
+        bodyState: commonFilters.bodyState,
+        conversationId: commonFilters.conversationId,
+        runId: commonFilters.runId,
         ...(commonFilters.model && { model: commonFilters.model }),
         ...(commonFilters.token && { token: commonFilters.token }),
         ...(commonFilters.group && { group: commonFilters.group }),
@@ -71,6 +76,12 @@ export function buildSearchParams(
       const taskFilters = filters as TaskLogFilters
       return {
         ...baseParams,
+        contentKeyword: taskFilters.contentKeyword,
+        requestKind: taskFilters.requestKind,
+        bodyState: taskFilters.bodyState,
+        conversationId: taskFilters.conversationId,
+        runId: taskFilters.runId,
+        taskStatus: taskFilters.status,
         ...(taskFilters.taskId && { filter: taskFilters.taskId }),
       }
     }

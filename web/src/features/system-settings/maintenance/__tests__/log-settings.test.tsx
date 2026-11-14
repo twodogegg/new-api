@@ -86,6 +86,7 @@ test('the page shows the log modules in order, each with its own controls', asyn
     screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent)
   ).toEqual([
     'Log recording',
+    'Request and response recording',
     'Log search and export',
     'System task records',
     'Clean history logs',

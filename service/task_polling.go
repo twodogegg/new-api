@@ -73,6 +73,7 @@ var ReportTaskFunc func(task *model.Task)
 // reportFinalTask reports a task once, after its final state is stored and
 // settled. A task no instance may report costs nothing.
 func reportFinalTask(task *model.Task) {
+	RecordTaskCompletion(task)
 	if ReportTaskFunc != nil && task.PrivateData.RequestPlugins != nil {
 		ReportTaskFunc(task)
 	}
@@ -82,7 +83,7 @@ func reportFinalTask(task *model.Task) {
 func reportFailedTasks(tasks []*model.Task, reason string) {
 	now := time.Now().Unix()
 	for _, task := range tasks {
-		if task == nil || task.PrivateData.RequestPlugins == nil {
+		if task == nil {
 			continue
 		}
 		task.Status, task.Progress, task.FailReason = model.TaskStatusFailure, "100%", reason
@@ -575,12 +576,15 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		key = privateData.Key
 	}
 	snap := task.Snapshot()
+	pollStarted := time.Now()
 	resp, err := adaptor.FetchTask(baseURL, key, task, proxy)
 	if err != nil {
+		RecordTaskPoll(task, nil, nil, pollStarted)
 		return recordPollFailure(ctx, adaptor, task, snap.Status, pollClassTransport, 0, err.Error())
 	}
 	defer resp.Body.Close()
 	responseBody, err := io.ReadAll(resp.Body)
+	RecordTaskPoll(task, resp, responseBody, pollStarted)
 	if err != nil {
 		return recordPollFailure(ctx, adaptor, task, snap.Status, pollClassTransport, resp.StatusCode, err.Error())
 	}
