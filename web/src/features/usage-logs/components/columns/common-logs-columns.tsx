@@ -72,6 +72,7 @@ import {
   getLogTypeConfig,
   isPerCallBilling,
 } from '../../lib/utils'
+import { RequestRecordButton } from '../../records/request-record-details'
 import type { LogOtherData } from '../../types'
 import { DetailsDialog } from '../dialogs/details-dialog'
 import { LogCostDisplay } from '../log-cost-display'
@@ -904,6 +905,19 @@ export function useCommonLogsColumns(
       }
     )
 
+    columns.push({
+      id: 'request_record',
+      header: t('Request details'),
+      size: 140,
+      cell: ({ row }) =>
+        isTimingLogType(row.original.type) ? (
+          <RequestRecordButton
+            requestId={row.original.request_id}
+            userId={row.original.user_id}
+            isAdmin={isAdmin}
+          />
+        ) : null,
+    })
     return columns
     // Log formatters read currency settings from the store.
     // eslint-disable-next-line react-hooks/exhaustive-deps

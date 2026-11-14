@@ -276,6 +276,9 @@ func validateOptionValue(key string, value string) error {
 	if key == operation_setting.LogMaxRangeDaysOptionKey {
 		return operation_setting.ValidateLogMaxRangeDays(value)
 	}
+	if strings.HasPrefix(key, "request_record_setting.") {
+		return operation_setting.ValidateRequestRecordOption(key, value)
+	}
 	if key == operation_setting.SystemTaskRetentionDaysOptionKey {
 		return operation_setting.ValidateSystemTaskRetentionDays(value)
 	}
@@ -728,6 +731,9 @@ func handleConfigUpdate(key, value string) bool {
 
 	configName := parts[0]
 	configKey := parts[1]
+	if configName == "request_record_setting" {
+		return config.GlobalConfig.Update(configName, map[string]string{configKey: value}) == nil
+	}
 
 	// 获取配置对象
 	cfg := config.GlobalConfig.Get(configName)

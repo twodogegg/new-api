@@ -91,6 +91,7 @@ import {
   isPerCallBilling,
   isTimingLogType,
 } from '../../lib/utils'
+import { RequestRecordButton } from '../../records/request-record-details'
 import { USAGE_BILLING_PATH, type LogOtherData } from '../../types'
 import { ResponseModelDetails } from '../model-badge'
 import { PluginAuthorLink } from '../plugin-author-link'
@@ -700,6 +701,13 @@ export function DetailsDialog(props: DetailsDialogProps) {
       bodyClassName='pr-2 sm:pr-4'
     >
       <div className='w-full max-w-full min-w-0 space-y-2.5 overflow-x-hidden py-1 sm:space-y-3'>
+        {showTiming && (
+          <RequestRecordButton
+            requestId={props.log.request_id}
+            userId={props.log.user_id}
+            isAdmin={props.isAdmin}
+          />
+        )}
         {/* Overview section - key identifiers */}
         <div className='min-w-0 space-y-1'>
           {props.log.request_id && (

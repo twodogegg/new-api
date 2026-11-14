@@ -490,10 +490,24 @@ type LogFilter struct {
 	Group             string
 	RequestId         string
 	UpstreamRequestId string
+	RecordFilter      *RequestRecordFilter
 }
 
 func (f LogFilter) apply(tx *gorm.DB) (*gorm.DB, error) {
 	var err error
+	if f.RecordFilter != nil {
+		filter := *f.RecordFilter
+		filter.StartTimestamp, filter.EndTimestamp = f.StartTimestamp, f.EndTimestamp
+		ids, err := MatchingRequestRecordIDs(filter)
+		if err != nil {
+			return nil, err
+		}
+		if len(ids) == 0 {
+			tx = tx.Where("1 = 0")
+		} else {
+			tx = tx.Where("logs.request_id IN ?", ids)
+		}
+	}
 	if f.Type != LogTypeUnknown {
 		tx = tx.Where("logs.type = ?", f.Type)
 	}
@@ -690,11 +704,27 @@ type Stat struct {
 	Tpm   int `json:"tpm"`
 }
 
-func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {
+func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string, recordFilters ...*RequestRecordFilter) (stat Stat, err error) {
 	tx := LOG_DB.Table("logs").Select("COALESCE(sum(quota), 0) quota")
 
 	// 为rpm和tpm创建单独的查询
 	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) tpm")
+	if len(recordFilters) > 0 && recordFilters[0] != nil {
+		filter := *recordFilters[0]
+		if !filter.Admin {
+			tx, rpmTpmQuery = tx.Where("user_id = ?", filter.UserID), rpmTpmQuery.Where("user_id = ?", filter.UserID)
+		}
+		filter.StartTimestamp, filter.EndTimestamp = startTimestamp, endTimestamp
+		ids, err := MatchingRequestRecordIDs(filter)
+		if err != nil {
+			return stat, err
+		}
+		if len(ids) == 0 {
+			tx, rpmTpmQuery = tx.Where("1 = 0"), rpmTpmQuery.Where("1 = 0")
+		} else {
+			tx, rpmTpmQuery = tx.Where("request_id IN ?", ids), rpmTpmQuery.Where("request_id IN ?", ids)
+		}
+	}
 
 	if tx, err = applyExplicitLogTextFilter(tx, "username", username); err != nil {
 		return stat, err

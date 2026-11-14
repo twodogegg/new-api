@@ -57,6 +57,11 @@ const logSettingsSchema = z.object({
   system_task_setting: z.object({
     retention_days: z.number().int().min(1),
   }),
+  request_record_setting: z.object({
+    enabled: z.boolean(),
+    retention_days: z.number().int().min(1).max(3650),
+    max_body_mb: z.number().int().min(1).max(64),
+  }),
 })
 
 type LogSettingsFormValues = z.infer<typeof logSettingsSchema>
@@ -67,6 +72,9 @@ type LogSettingsSectionProps = {
     'log_setting.user_export_enabled': boolean
     'log_setting.max_range_days': number
     'system_task_setting.retention_days': number
+    'request_record_setting.enabled'?: boolean
+    'request_record_setting.retention_days'?: number
+    'request_record_setting.max_body_mb'?: number
   }
 }
 
@@ -74,6 +82,7 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
   const recordingTitleId = useId()
+  const requestRecordingTitleId = useId()
   const searchTitleId = useId()
   const taskHistoryTitleId = useId()
   const formDefaults = useMemo<LogSettingsFormValues>(
@@ -88,6 +97,13 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
         retention_days:
           props.defaultValues['system_task_setting.retention_days'],
       },
+      request_record_setting: {
+        enabled: props.defaultValues['request_record_setting.enabled'] ?? false,
+        retention_days:
+          props.defaultValues['request_record_setting.retention_days'] ?? 7,
+        max_body_mb:
+          props.defaultValues['request_record_setting.max_body_mb'] ?? 16,
+      },
     }),
     [props.defaultValues]
   )
@@ -101,6 +117,15 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
   }, [formDefaults, form])
 
   const onSubmit = async (values: LogSettingsFormValues) => {
+    const previous = {
+      ...props.defaultValues,
+      'request_record_setting.enabled':
+        formDefaults.request_record_setting.enabled,
+      'request_record_setting.retention_days':
+        formDefaults.request_record_setting.retention_days,
+      'request_record_setting.max_body_mb':
+        formDefaults.request_record_setting.max_body_mb,
+    }
     const changes = [
       ['LogConsumeEnabled', values.LogConsumeEnabled],
       [
@@ -108,13 +133,22 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
         values.log_setting.user_export_enabled,
       ],
       ['log_setting.max_range_days', values.log_setting.max_range_days],
+      ['request_record_setting.enabled', values.request_record_setting.enabled],
+      [
+        'request_record_setting.retention_days',
+        values.request_record_setting.retention_days,
+      ],
+      [
+        'request_record_setting.max_body_mb',
+        values.request_record_setting.max_body_mb,
+      ],
       [
         'system_task_setting.retention_days',
         values.system_task_setting.retention_days,
       ],
     ] as const
     for (const [key, value] of changes) {
-      if (value === props.defaultValues[key]) continue
+      if (value === previous[key]) continue
       await updateOption.mutateAsync({ key, value })
     }
   }
@@ -163,6 +197,95 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
 
           <Separator />
 
+          <div
+            role='group'
+            aria-labelledby={requestRecordingTitleId}
+            className='flex min-w-0 flex-col gap-4'
+          >
+            <h4 id={requestRecordingTitleId} className='font-medium'>
+              {t('Request and response recording')}
+            </h4>
+            <FormField
+              control={form.control}
+              name='request_record_setting.enabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>
+                      {t('Save request and response bodies')}
+                    </FormLabel>
+                    <FormDescription>
+                      {t(
+                        'Keep prompts, responses, and media in private local files. Repeated context is deduplicated. Recording is disabled by default.'
+                      )}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </SettingsSwitchItem>
+              )}
+            />
+            <SettingsFormGrid>
+              <FormField
+                control={form.control}
+                name='request_record_setting.retention_days'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {t('Maximum recording retention (days)')}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min={1}
+                        max={3650}
+                        step={1}
+                        {...safeNumberFieldProps(field)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Expired bodies and unreferenced media are cleaned automatically. Usage logs and task summaries remain available.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='request_record_setting.max_body_mb'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {t('Maximum captured body size (MB)')}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min={1}
+                        max={64}
+                        step={1}
+                        {...safeNumberFieldProps(field)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Content above this limit is marked as truncated. Recording failures do not interrupt model requests.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </SettingsFormGrid>
+          </div>
+          <Separator />
           <div
             role='group'
             aria-labelledby={searchTitleId}

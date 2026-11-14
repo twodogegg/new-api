@@ -47,6 +47,7 @@ import { requireServerSuccess } from '@/lib/server-error-message'
 import { LOG_TYPE_ALL_VALUE, LOG_TYPE_FILTERS } from '../constants'
 import { buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
+import { RequestContentFilterFields } from '../records/request-content-filters'
 import type { CommonLogFilters } from '../types'
 import { CommonLogsStats } from './common-logs-stats'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
@@ -94,6 +95,11 @@ function buildSearchSourceKey(values: {
   username?: unknown
   requestId?: unknown
   upstreamRequestId?: unknown
+  contentKeyword?: unknown
+  requestKind?: unknown
+  bodyState?: unknown
+  conversationId?: unknown
+  runId?: unknown
   type?: unknown
 }) {
   return [
@@ -106,6 +112,11 @@ function buildSearchSourceKey(values: {
     values.username,
     values.requestId,
     values.upstreamRequestId,
+    values.contentKeyword,
+    values.requestKind,
+    values.bodyState,
+    values.conversationId,
+    values.runId,
     Array.isArray(values.type) ? values.type.join(',') : values.type,
   ]
     .map((value) => String(value ?? ''))
@@ -158,6 +169,11 @@ export function CommonLogsFilterBar<TData>(
       username: searchParams.username,
       requestId: searchParams.requestId,
       upstreamRequestId: searchParams.upstreamRequestId,
+      contentKeyword: searchParams.contentKeyword,
+      requestKind: searchParams.requestKind,
+      bodyState: searchParams.bodyState,
+      conversationId: searchParams.conversationId,
+      runId: searchParams.runId,
       type: searchParams.type,
     }
     const filters: CommonLogFilters = {
@@ -172,6 +188,11 @@ export function CommonLogsFilterBar<TData>(
       username: searchParams.username || undefined,
       requestId: searchParams.requestId || undefined,
       upstreamRequestId: searchParams.upstreamRequestId || undefined,
+      contentKeyword: searchParams.contentKeyword || undefined,
+      requestKind: searchParams.requestKind || undefined,
+      bodyState: searchParams.bodyState || undefined,
+      conversationId: searchParams.conversationId || undefined,
+      runId: searchParams.runId || undefined,
     }
     return {
       sourceKey: buildSearchSourceKey(sourceValues),
@@ -188,6 +209,11 @@ export function CommonLogsFilterBar<TData>(
     searchParams.username,
     searchParams.requestId,
     searchParams.upstreamRequestId,
+    searchParams.contentKeyword,
+    searchParams.requestKind,
+    searchParams.bodyState,
+    searchParams.conversationId,
+    searchParams.runId,
     searchParams.type,
   ])
   const [draft, setDraft] = useState<CommonLogDraft>(() => searchState)
@@ -267,7 +293,12 @@ export function CommonLogsFilterBar<TData>(
     !!filters.username ||
     !!filters.channel ||
     !!filters.requestId ||
-    !!filters.upstreamRequestId
+    !!filters.upstreamRequestId ||
+    !!filters.contentKeyword ||
+    !!filters.requestKind ||
+    !!filters.bodyState ||
+    !!filters.conversationId ||
+    !!filters.runId
 
   const hasTypeFilter = logType !== LOG_TYPE_ALL_VALUE
   const hasAdditionalFilters =
@@ -279,6 +310,11 @@ export function CommonLogsFilterBar<TData>(
     isAdmin ? filters.channel : undefined,
     filters.requestId,
     filters.upstreamRequestId,
+    filters.contentKeyword,
+    filters.requestKind,
+    filters.bodyState,
+    filters.conversationId,
+    filters.runId,
   ].filter(Boolean).length
   const sensitiveInputClass = sensitiveVisible
     ? undefined
@@ -435,6 +471,11 @@ export function CommonLogsFilterBar<TData>(
   )
   const advancedFilters = (
     <>
+      <RequestContentFilterFields
+        filters={filters}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+      />
       <LogsFilterField>
         <LogsFilterInput
           placeholder={t('Token Name')}

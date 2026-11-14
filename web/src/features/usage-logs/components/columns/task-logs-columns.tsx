@@ -31,6 +31,7 @@ import { translateServerText } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
 import { taskActionMapper, taskStatusMapper } from '../../lib/mappers'
+import { RequestRecordButton } from '../../records/request-record-details'
 import type { TaskLog } from '../../types'
 import { TaskDetailsDialog } from '../dialogs/task-details-dialog'
 import { PluginAuthorLink } from '../plugin-author-link'
@@ -276,6 +277,14 @@ export function useTaskLogsColumns(
       }
     )
 
+    columns.push({
+      id: 'request_record',
+      header: t('Request details'),
+      size: 140,
+      cell: ({ row }) => (
+        <RequestRecordButton taskId={row.original.task_id} isAdmin={isAdmin} />
+      ),
+    })
     return columns
   }, [t, isAdmin, isRoot])
 }

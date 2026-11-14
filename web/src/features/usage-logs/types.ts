@@ -24,6 +24,7 @@ import type { PolicyEvent } from '@/features/system-settings/request-policies/ap
 import type { LocalizedTextValue } from '@/lib/localized-text'
 
 import type { UsageLog } from './data/schema'
+import type { RequestContentFilters } from './records/types'
 // ============================================================================
 // Log Category Types
 // ============================================================================
@@ -49,7 +50,7 @@ export interface CommonFilters {
 /**
  * Common logs specific filters
  */
-export interface CommonLogFilters extends CommonFilters {
+export interface CommonLogFilters extends CommonFilters, RequestContentFilters {
   model?: string
   token?: string
   group?: string
@@ -68,8 +69,9 @@ export interface DrawingLogFilters extends CommonFilters {
 /**
  * Task logs specific filters
  */
-export interface TaskLogFilters extends CommonFilters {
+export interface TaskLogFilters extends CommonFilters, RequestContentFilters {
   taskId?: string
+  status?: string
 }
 
 /**
@@ -514,6 +516,11 @@ export interface TaskArtifactsResponse {
 // ============================================================================
 
 export interface GetLogsParams {
+  content_keyword?: string
+  request_kind?: string
+  body_state?: string
+  conversation_id?: string
+  run_id?: string
   p?: number
   page_size?: number
   type?: number
@@ -576,6 +583,12 @@ export interface GetMidjourneyLogsParams {
 // ============================================================================
 
 export interface GetTaskLogsParams {
+  content_keyword?: string
+  request_kind?: string
+  body_state?: string
+  conversation_id?: string
+  run_id?: string
+  status?: string
   p?: number
   page_size?: number
   channel_id?: string

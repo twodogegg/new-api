@@ -108,6 +108,12 @@ const OPERATIONS_SECTIONS = [
             settings['log_setting.user_export_enabled'] ?? true,
           'log_setting.max_range_days':
             settings['log_setting.max_range_days'] ?? 365,
+          'request_record_setting.enabled':
+            settings['request_record_setting.enabled'] ?? false,
+          'request_record_setting.retention_days':
+            settings['request_record_setting.retention_days'] ?? 7,
+          'request_record_setting.max_body_mb':
+            settings['request_record_setting.max_body_mb'] ?? 16,
           'system_task_setting.retention_days':
             settings['system_task_setting.retention_days'] ?? 30,
         }}
