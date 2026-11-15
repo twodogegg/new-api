@@ -5325,6 +5325,7 @@
     "Reason:": "原因：",
     "Reason: {{reason}}": "原因：{{reason}}",
     "Reasoning": "推理",
+    "Reasoning and tools": "思考與工具",
     "Reasoning Effort": "推理強度",
     "Reasoning effort: {{effort}}": "推理強度：{{effort}}",
     "Recalculated from tokens: tokens {{tokens}}, model ratio {{model_ratio}}, group ratio {{group_ratio}}, other multiplier {{other_multiplier}}": "按 token 重算：tokens {{tokens}}，模型倍率 {{model_ratio}}，分組倍率 {{group_ratio}}，其他倍數 {{other_multiplier}}",

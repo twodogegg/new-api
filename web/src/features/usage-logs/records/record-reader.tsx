@@ -348,10 +348,10 @@ function RecordMessageItem(props: {
 }
 
 function ToolReplyGroup(props: {
+  title: string
   messages: RecordMessage[]
   recordId?: number
 }) {
-  const { t } = useTranslation()
   return (
     <Collapsible
       defaultOpen={false}
@@ -367,7 +367,7 @@ function ToolReplyGroup(props: {
       >
         <span className='flex min-w-0 items-center gap-2'>
           <ChevronDown className='text-muted-foreground size-4 shrink-0 -rotate-90 transition-transform group-data-[panel-open]:rotate-0' />
-          <span className='truncate'>{t('Tools')}</span>
+          <span className='truncate'>{props.title}</span>
         </span>
         <span className='text-muted-foreground shrink-0 text-xs font-medium'>
           {props.messages.length}
@@ -392,25 +392,27 @@ function ConversationList(props: {
   messages: RecordMessage[]
   recordId?: number
 }) {
+  const { t } = useTranslation()
   const nodes: React.ReactNode[] = []
-  let toolBuffer: RecordMessage[] = []
-  const flushTools = (suffix: string) => {
-    if (!toolBuffer.length) return
+  let processBuffer: RecordMessage[] = []
+  const flushProcess = (suffix: string) => {
+    if (!processBuffer.length) return
     nodes.push(
       <ToolReplyGroup
-        key={`tools:${suffix}`}
-        messages={toolBuffer}
+        key={`process:${suffix}`}
+        title={t('Reasoning and tools')}
+        messages={processBuffer}
         recordId={props.recordId}
       />
     )
-    toolBuffer = []
+    processBuffer = []
   }
   props.messages.forEach((message, index) => {
-    if (message.kind === 'tool') {
-      toolBuffer.push(message)
+    if (message.kind === 'tool' || message.kind === 'reasoning') {
+      processBuffer.push(message)
       return
     }
-    flushTools(message.id ?? String(index))
+    flushProcess(message.id ?? String(index))
     nodes.push(
       <RecordMessageItem
         key={message.id ?? String(index)}
@@ -419,7 +421,7 @@ function ConversationList(props: {
       />
     )
   })
-  flushTools('end')
+  flushProcess('end')
   return <div className='space-y-3'>{nodes}</div>
 }
 
@@ -564,6 +566,7 @@ export function RecordReader(props: { detail: RequestRecordDetail }) {
             ))}
             {toolReplies.length > 0 && (
               <ToolReplyGroup
+                title={t('Tools')}
                 messages={toolReplies}
                 recordId={props.detail.record?.id}
               />

@@ -375,6 +375,7 @@ test('folds tool calls in the input conversation history', async () => {
                 { role: 'user', content: 'hello' },
                 {
                   role: 'assistant',
+                  reasoning_content: 'thinking',
                   tool_calls: [
                     {
                       id: 't1',
@@ -396,15 +397,17 @@ test('folds tool calls in the input conversation history', async () => {
   renderButton()
   await user.click(screen.getByRole('button', { name: 'Request details' }))
   expect(await screen.findByText('hello')).toBeVisible()
-  const group = screen.getByRole('button', { name: /Tools/ })
+  const group = screen.getByRole('button', { name: /Reasoning and tools/ })
   expect(group).toBeVisible()
   expect(
     screen.queryByRole('button', { name: /Tool (call|result)/ })
   ).not.toBeInTheDocument()
+  expect(screen.queryByText('Returned reasoning')).not.toBeInTheDocument()
   await user.click(group)
   expect(
     await screen.findAllByRole('button', { name: /Tool (call|result)/ })
   ).toHaveLength(2)
+  expect(await screen.findByText('Returned reasoning')).toBeVisible()
 })
 
 test.each([

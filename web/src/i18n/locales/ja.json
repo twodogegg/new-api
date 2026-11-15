@@ -5325,6 +5325,7 @@
     "Reason:": "理由：",
     "Reason: {{reason}}": "理由：{{reason}}",
     "Reasoning": "理由",
+    "Reasoning and tools": "推論とツール",
     "Reasoning Effort": "推論強度",
     "Reasoning effort: {{effort}}": "推論強度：{{effort}}",
     "Recalculated from tokens: tokens {{tokens}}, model ratio {{model_ratio}}, group ratio {{group_ratio}}, other multiplier {{other_multiplier}}": "トークンで再計算：トークン {{tokens}}、モデル倍率 {{model_ratio}}、グループ倍率 {{group_ratio}}、その他の倍数 {{other_multiplier}}",

@@ -5325,6 +5325,7 @@
     "Reason:": "Причина:",
     "Reason: {{reason}}": "Причина: {{reason}}",
     "Reasoning": "Обоснование",
+    "Reasoning and tools": "Рассуждение и инструменты",
     "Reasoning Effort": "Интенсивность рассуждения",
     "Reasoning effort: {{effort}}": "Интенсивность рассуждения: {{effort}}",
     "Recalculated from tokens: tokens {{tokens}}, model ratio {{model_ratio}}, group ratio {{group_ratio}}, other multiplier {{other_multiplier}}": "Пересчитано по токенам: токены {{tokens}}, коэффициент модели {{model_ratio}}, коэффициент группы {{group_ratio}}, прочий множитель {{other_multiplier}}",

@@ -5325,6 +5325,7 @@
     "Reason:": "Reason:",
     "Reason: {{reason}}": "Reason: {{reason}}",
     "Reasoning": "Reasoning",
+    "Reasoning and tools": "Reasoning and tools",
     "Reasoning Effort": "Reasoning Effort",
     "Reasoning effort: {{effort}}": "Reasoning effort: {{effort}}",
     "Recalculated from tokens: tokens {{tokens}}, model ratio {{model_ratio}}, group ratio {{group_ratio}}, other multiplier {{other_multiplier}}": "Recalculated from tokens: tokens {{tokens}}, model ratio {{model_ratio}}, group ratio {{group_ratio}}, other multiplier {{other_multiplier}}",
