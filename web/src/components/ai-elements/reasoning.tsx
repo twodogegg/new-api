@@ -23,6 +23,7 @@ import {
   type ComponentProps,
   createContext,
   memo,
+  type ReactNode,
   useContext,
   useEffect,
   useState,
@@ -139,10 +140,14 @@ export const Reasoning = memo(
   }
 )
 
-export type ReasoningTriggerProps = ComponentProps<typeof CollapsibleTrigger>
+export type ReasoningTriggerProps = ComponentProps<
+  typeof CollapsibleTrigger
+> & {
+  label?: ReactNode
+}
 
 export const ReasoningTrigger = memo(
-  ({ className, children, ...props }: ReasoningTriggerProps) => {
+  ({ className, children, label, ...props }: ReasoningTriggerProps) => {
     const { isStreaming, isOpen, duration } = useReasoning()
     const { t } = useTranslation()
     const thinkingText = t('Thought for {{duration}} seconds', {
@@ -163,11 +168,12 @@ export const ReasoningTrigger = memo(
               <BrainIcon className='size-3.5' />
             </span>
             <span className='min-w-0 truncate leading-none'>
-              {isStreaming ? (
-                <Shimmer duration={1}>{t('Thinking...')}</Shimmer>
-              ) : (
-                thinkingText
-              )}
+              {label ??
+                (isStreaming ? (
+                  <Shimmer duration={1}>{t('Thinking...')}</Shimmer>
+                ) : (
+                  thinkingText
+                ))}
             </span>
             <span className='grid size-3.5 place-items-center'>
               <ChevronDownIcon

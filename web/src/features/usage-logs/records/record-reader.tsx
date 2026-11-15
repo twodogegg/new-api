@@ -235,7 +235,7 @@ function RecordMessageItem(props: { message: RecordMessage }) {
   if (message.kind === 'reasoning') {
     return (
       <Reasoning>
-        <ReasoningTrigger>{t('Returned reasoning')}</ReasoningTrigger>
+        <ReasoningTrigger label={t('Returned reasoning')} />
         <ReasoningContent>{message.text}</ReasoningContent>
       </Reasoning>
     )

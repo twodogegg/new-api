@@ -248,6 +248,38 @@ test('folds legacy raw stream frames into a merged view during inspection', asyn
   ).not.toBeInTheDocument()
 })
 
+test('renders returned reasoning with an inline label', async () => {
+  const user = userEvent.setup()
+  const reasoningDetail: RequestRecordDetail = {
+    ...detail,
+    snapshots: detail.snapshots.map((snapshot) =>
+      snapshot.stage === 'client_response'
+        ? {
+            ...snapshot,
+            body: {
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: 'Final answer',
+                    reasoning_content: 'Hidden chain of thought',
+                  },
+                },
+              ],
+            },
+          }
+        : snapshot
+    ),
+  }
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: reasoningDetail },
+  })
+  renderButton()
+  await user.click(screen.getByRole('button', { name: 'Request details' }))
+  expect(await screen.findByText('Final answer')).toBeVisible()
+  expect(screen.getByText('Returned reasoning')).toBeVisible()
+})
+
 test.each([
   [{ record: null, snapshots: [], media: [] }, 'Body not captured'],
   [
