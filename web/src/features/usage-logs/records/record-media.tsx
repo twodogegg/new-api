@@ -31,6 +31,7 @@ import { formatBytes } from '@/lib/format'
 import { ArtifactMedia } from '../components/task-artifacts'
 import type { TaskArtifactType } from '../types'
 import { getRecordMedia } from './api'
+import { uniqueRecordMedia } from './media-dedupe'
 import type { RecordMedia, RequestRecordDetail } from './types'
 
 function RecordMediaItem(props: { recordId: number; media: RecordMedia }) {
@@ -104,12 +105,7 @@ function RecordMediaItem(props: { recordId: number; media: RecordMedia }) {
 
 export function RecordMediaGrid(props: { detail: RequestRecordDetail }) {
   const { t } = useTranslation()
-  const unique = props.detail.media.filter(
-    (media, index, items) =>
-      items.findIndex(
-        (item) => item.blob_id === media.blob_id && item.stage === media.stage
-      ) === index
-  )
+  const unique = uniqueRecordMedia(props.detail.media)
   if (!unique.length || !props.detail.record) {
     return (
       <EmptyState
