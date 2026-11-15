@@ -347,6 +347,47 @@ function RecordMessageItem(props: {
   )
 }
 
+function ToolReplyGroup(props: {
+  messages: RecordMessage[]
+  recordId?: number
+}) {
+  const { t } = useTranslation()
+  return (
+    <Collapsible
+      defaultOpen={false}
+      className='bg-muted/20 overflow-hidden rounded-xl border'
+    >
+      <CollapsibleTrigger
+        render={
+          <Button
+            variant='ghost'
+            className='group h-auto w-full justify-between gap-3 rounded-none px-3 py-2.5 text-left font-medium'
+          />
+        }
+      >
+        <span className='flex min-w-0 items-center gap-2'>
+          <ChevronDown className='text-muted-foreground size-4 shrink-0 -rotate-90 transition-transform group-data-[panel-open]:rotate-0' />
+          <span className='truncate'>{t('Tools')}</span>
+        </span>
+        <span className='text-muted-foreground shrink-0 text-xs font-medium'>
+          {props.messages.length}
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className='space-y-2 border-t px-3 py-2'>
+          {props.messages.map((message) => (
+            <RecordMessageItem
+              key={message.id}
+              message={message}
+              recordId={props.recordId}
+            />
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
 function ReaderSection(props: {
   label: string
   children: React.ReactNode
@@ -382,6 +423,12 @@ export function RecordReader(props: { detail: RequestRecordDetail }) {
     replyKeys.set(key, occurrence + 1)
     return { ...message, id: `${key}:${occurrence}` }
   })
+  const toolReplies = identifiedReplies.filter(
+    (message) => message.kind === 'tool'
+  )
+  const visibleReplies = identifiedReplies.filter(
+    (message) => message.kind !== 'tool'
+  )
   const tools = recordObject(input?.body).tools
   const toolList = Array.isArray(tools) ? tools : []
   const reminders = messages.filter((message) => message.kind === 'reminder')
@@ -455,13 +502,21 @@ export function RecordReader(props: { detail: RequestRecordDetail }) {
       </ReaderSection>
       <ReaderSection label={t('Model response')} className='border-t pt-5'>
         {identifiedReplies.length ? (
-          identifiedReplies.map((message) => (
-            <RecordMessageItem
-              key={message.id}
-              message={message}
-              recordId={props.detail.record?.id}
-            />
-          ))
+          <>
+            {visibleReplies.map((message) => (
+              <RecordMessageItem
+                key={message.id}
+                message={message}
+                recordId={props.detail.record?.id}
+              />
+            ))}
+            {toolReplies.length > 0 && (
+              <ToolReplyGroup
+                messages={toolReplies}
+                recordId={props.detail.record?.id}
+              />
+            )}
+          </>
         ) : (
           <p className='text-muted-foreground text-sm'>
             {t('No readable response was captured.')}

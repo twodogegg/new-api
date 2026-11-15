@@ -312,6 +312,55 @@ test('shows a task-style detail without conversation context for non-LLM records
   ).not.toBeInTheDocument()
 })
 
+test('folds many tool calls in the model response into a collapsed group', async () => {
+  const user = userEvent.setup()
+  const toolDetail: RequestRecordDetail = {
+    ...detail,
+    snapshots: detail.snapshots.map((snapshot) =>
+      snapshot.stage === 'client_response'
+        ? {
+            ...snapshot,
+            body: {
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: 'Done',
+                    tool_calls: [
+                      {
+                        id: 'c1',
+                        function: { name: 'bash', arguments: '{"cmd":"ls"}' },
+                      },
+                      {
+                        id: 'c2',
+                        function: { name: 'bash', arguments: '{"cmd":"pwd"}' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          }
+        : snapshot
+    ),
+  }
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: toolDetail },
+  })
+  renderButton()
+  await user.click(screen.getByRole('button', { name: 'Request details' }))
+  expect(await screen.findByText('Done')).toBeVisible()
+  const group = screen.getByRole('button', { name: /Tools/ })
+  expect(group).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: /Tool call/ })
+  ).not.toBeInTheDocument()
+  await user.click(group)
+  expect(
+    await screen.findAllByRole('button', { name: /Tool call/ })
+  ).toHaveLength(2)
+})
+
 test.each([
   [{ record: null, snapshots: [], media: [] }, 'Body not captured'],
   [
