@@ -392,22 +392,32 @@ function ReaderSection(props: {
   label: string
   children: React.ReactNode
   className?: string
+  aside?: React.ReactNode
 }) {
   return (
     <section
       className={cn('space-y-3', props.className)}
       aria-label={props.label}
     >
-      <h3 className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
-        {props.label}
-      </h3>
+      <div className='flex items-center justify-between gap-3'>
+        <h3 className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+          {props.label}
+        </h3>
+        {props.aside}
+      </div>
       {props.children}
     </section>
   )
 }
 
 export function RecordReader(props: { detail: RequestRecordDetail }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
+  const durationMs = props.detail.record?.duration_ms ?? 0
+  const durationText =
+    durationMs >= 1000
+      ? `${formatNumber(durationMs / 1000, locale)} s`
+      : `${formatNumber(durationMs, locale)} ms`
   const input = props.detail.snapshots.find(
     (snapshot) => snapshot.stage === 'client_request'
   )
@@ -500,7 +510,15 @@ export function RecordReader(props: { detail: RequestRecordDetail }) {
               </p>
             )}
       </ReaderSection>
-      <ReaderSection label={t('Model response')} className='border-t pt-5'>
+      <ReaderSection
+        label={t('Model response')}
+        className='border-t pt-5'
+        aside={
+          <span className='text-muted-foreground text-xs font-medium'>
+            {t('Duration')} · {durationText}
+          </span>
+        }
+      >
         {identifiedReplies.length ? (
           <>
             {visibleReplies.map((message) => (

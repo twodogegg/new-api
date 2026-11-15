@@ -278,6 +278,7 @@ test('renders returned reasoning with an inline label', async () => {
   await user.click(screen.getByRole('button', { name: 'Request details' }))
   expect(await screen.findByText('Final answer')).toBeVisible()
   expect(screen.getByText('Returned reasoning')).toBeVisible()
+  expect(screen.getByText(/Duration/)).toBeVisible()
 })
 
 test('shows a task-style detail without conversation context for non-LLM records', async () => {
