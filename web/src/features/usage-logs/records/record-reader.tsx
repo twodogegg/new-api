@@ -16,7 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, Wrench } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -41,13 +43,18 @@ import { toIntlLocale } from '@/i18n/languages'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
+import { getRecordMedia } from './api'
 import {
   recordObject,
   requestRecordMessages,
   responseRecordMessages,
 } from './messages'
 import { RecordMediaGrid } from './record-media'
-import type { RecordMessage, RequestRecordDetail } from './types'
+import type {
+  RecordMessage,
+  RecordMessageMedia,
+  RequestRecordDetail,
+} from './types'
 
 export function RecordJSON(props: { value: unknown; title: string }) {
   return (
@@ -229,9 +236,84 @@ function ToolDefinitions(props: { tools: unknown[] }) {
   )
 }
 
-function RecordMessageItem(props: { message: RecordMessage }) {
+function InlineMedia(props: { recordId: number; media: RecordMessageMedia }) {
+  const { t } = useTranslation()
+  const [url, setUrl] = useState('')
+  const query = useQuery({
+    queryKey: ['request-record-media', props.recordId, props.media.blobId],
+    queryFn: () => getRecordMedia(props.recordId, props.media.blobId),
+    retry: false,
+    gcTime: 0,
+  })
+  useEffect(() => {
+    if (!query.data) return
+    const objectUrl = URL.createObjectURL(query.data)
+    setUrl(objectUrl)
+    return () => URL.revokeObjectURL(objectUrl)
+  }, [query.data])
+  if (query.isPending) {
+    return <div className='bg-muted h-32 w-48 animate-pulse rounded-lg' />
+  }
+  if (query.isError || !url) {
+    return (
+      <p className='text-muted-foreground text-xs'>
+        {t('Media preview unavailable')}
+      </p>
+    )
+  }
+  if (props.media.mimeType.startsWith('image/')) {
+    return (
+      <img
+        alt={t('Image')}
+        className='max-h-64 max-w-full rounded-lg border object-contain'
+        src={url}
+      />
+    )
+  }
+  if (props.media.mimeType.startsWith('video/')) {
+    return (
+      <video
+        className='max-h-64 max-w-full rounded-lg border'
+        controls
+        src={url}
+      />
+    )
+  }
+  if (props.media.mimeType.startsWith('audio/')) {
+    return <audio className='w-full' controls src={url} />
+  }
+  return (
+    <a className='text-primary text-sm underline' download href={url}>
+      {t('Download')}
+    </a>
+  )
+}
+
+function RecordMessageItem(props: {
+  message: RecordMessage
+  recordId?: number
+}) {
   const { t } = useTranslation()
   const message = props.message
+  if (message.kind === 'image') {
+    if (!props.recordId || !message.media?.length) return null
+    const recordId = props.recordId
+    return (
+      <Message from={message.role === 'user' ? 'user' : 'assistant'}>
+        <MessageContent variant='flat' className='min-w-0 gap-2 py-1.5'>
+          <div className='flex flex-wrap gap-2'>
+            {message.media.map((media) => (
+              <InlineMedia
+                key={media.blobId}
+                media={media}
+                recordId={recordId}
+              />
+            ))}
+          </div>
+        </MessageContent>
+      </Message>
+    )
+  }
   if (message.kind === 'reasoning') {
     return (
       <Reasoning>
@@ -356,7 +438,11 @@ export function RecordReader(props: { detail: RequestRecordDetail }) {
         {toolList.length > 0 && <ToolDefinitions tools={toolList} />}
         {conversation.length > 0
           ? conversation.map((message) => (
-              <RecordMessageItem key={message.id} message={message} />
+              <RecordMessageItem
+                key={message.id}
+                message={message}
+                recordId={props.detail.record?.id}
+              />
             ))
           : instructions.length === 0 &&
             reminders.length === 0 &&
@@ -369,7 +455,11 @@ export function RecordReader(props: { detail: RequestRecordDetail }) {
       <ReaderSection label={t('Model response')} className='border-t pt-5'>
         {identifiedReplies.length ? (
           identifiedReplies.map((message) => (
-            <RecordMessageItem key={message.id} message={message} />
+            <RecordMessageItem
+              key={message.id}
+              message={message}
+              recordId={props.detail.record?.id}
+            />
           ))
         ) : (
           <p className='text-muted-foreground text-sm'>

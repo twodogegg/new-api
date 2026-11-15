@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { RecordMessage, RecordSnapshot } from './types'
+import type { RecordMessage, RecordMessageMedia, RecordSnapshot } from './types'
 
 export function recordObject(value: unknown): Record<string, unknown> {
   if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
@@ -44,6 +44,42 @@ function recordText(value: unknown): string {
   if (typeof object.text === 'string') return object.text
   if (object.content === undefined && object.parts === undefined) return ''
   return recordText(object.content ?? object.parts)
+}
+
+// A serialized image is stored as a `_record_media` marker instead of inline
+// base64. Collect those markers so the reader can render the attachment; the
+// surrounding "Image ... (sha256:...)" description is harness metadata that
+// would otherwise duplicate the picture as text.
+function collectMedia(value: unknown, media: RecordMessageMedia[]) {
+  if (Array.isArray(value)) {
+    for (const child of value) collectMedia(child, media)
+    return
+  }
+  const object = recordObject(value)
+  const id = object._record_media
+  if (typeof id === 'string' && id) {
+    media.push({
+      blobId: id,
+      mimeType: typeof object.mime_type === 'string' ? object.mime_type : '',
+    })
+  }
+  for (const key of Object.keys(object)) {
+    if (key === '_record_media') continue
+    const child = object[key]
+    if (child !== null && typeof child === 'object') collectMedia(child, media)
+  }
+}
+
+const IMAGE_METADATA_PATTERN = /^Image\s+"[^"]*"\s*\(sha256:/i
+
+function recordDisplayText(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value
+      .map((part) => recordText(part))
+      .filter((text) => text && !IMAGE_METADATA_PATTERN.test(text.trim()))
+      .join('\n')
+  }
+  return recordText(value)
 }
 
 const SYSTEM_REMINDER_PATTERN =
@@ -80,7 +116,12 @@ function messagesFromItem(
   const role = typeof object.role === 'string' ? object.role : fallbackRole
   const content = object.content ?? object.parts
   const messages: RecordMessage[] = []
-  const text = recordText(content)
+  const media: RecordMessageMedia[] = []
+  collectMedia(content, media)
+  if (media.length > 0) {
+    messages.push({ role, text: '', kind: 'image', media })
+  }
+  const text = recordDisplayText(content)
   if (text) {
     if (role === 'tool') {
       messages.push({

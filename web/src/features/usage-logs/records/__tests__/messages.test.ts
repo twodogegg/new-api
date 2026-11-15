@@ -144,9 +144,47 @@ describe('request record reading', () => {
   ])(
     'reads protocol messages without rendering inline media as text',
     (body, role, text) => {
-      expect(requestRecordMessages(body)).toMatchObject([{ role, text }])
+      expect(
+        requestRecordMessages(body).filter(
+          (message) => message.kind !== 'image'
+        )
+      ).toMatchObject([{ role, text }])
     }
   )
+
+  test('extracts inline image attachments as media and drops the metadata line', () => {
+    const messages = requestRecordMessages({
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Image "image.png" (sha256:abc12345); request preview 936x584px.',
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: { _record_media: 'blob-1', mime_type: 'image/webp' },
+              },
+            },
+            { type: 'text', text: '我发了什么给你。' },
+          ],
+        },
+      ],
+    })
+    expect(
+      messages.map((message) => [
+        message.kind,
+        message.text,
+        message.media?.[0]?.blobId,
+        message.media?.[0]?.mimeType,
+      ])
+    ).toEqual([
+      ['image', '', 'blob-1', 'image/webp'],
+      ['text', '我发了什么给你。', undefined, undefined],
+    ])
+  })
 
   test('joins streamed text and tool arguments without repeating final response text', () => {
     const output = responseRecordMessages({
@@ -242,6 +280,11 @@ describe('request record reading', () => {
     expect(
       requestRecordMessages({
         messages: [{ role: 'user', content: { _record_media: 'file' } }],
+      }).map((message) => [message.kind, message.media?.[0]?.blobId])
+    ).toEqual([['image', 'file']])
+    expect(
+      requestRecordMessages({
+        messages: [{ role: 'user', content: { unexpected: true } }],
       })
     ).toEqual([])
     expect(responseRecordMessages()).toEqual([])
