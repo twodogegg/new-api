@@ -46,6 +46,7 @@ import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 import { safeNumberFieldProps } from '../utils/numeric-field'
 import { HistoryLogCleanup } from './history-log-cleanup'
+import { RequestRecordCleanup } from './request-record-cleanup'
 import { ServerLogFiles } from './server-log-files'
 
 const logSettingsSchema = z.object({
@@ -285,6 +286,8 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
               />
             </SettingsFormGrid>
           </div>
+          <Separator />
+          <RequestRecordCleanup />
           <Separator />
           <div
             role='group'

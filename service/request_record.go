@@ -456,3 +456,20 @@ func RequestRecordStorageUsage() (int64, error) {
 	})
 	return total, err
 }
+
+// ClearRequestRecords removes every saved body/media file and its index rows.
+// Usage logs and task summaries are intentionally left untouched.
+func ClearRequestRecords() (int64, error) {
+	freed, _ := RequestRecordStorageUsage()
+	if err := model.ClearRequestRecords(); err != nil {
+		return 0, err
+	}
+	dir := requestRecordDirectory()
+	if err := os.RemoveAll(dir); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return freed, err
+	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return freed, err
+	}
+	return freed, nil
+}

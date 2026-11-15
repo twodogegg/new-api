@@ -85,6 +85,20 @@ func SaveRequestRecord(record *RequestRecord, blobs []RequestRecordBlob, writeFi
 	})
 }
 
+// ClearRequestRecords deletes every request record and its blob references.
+// The stored files are removed by the service layer that owns the storage dir.
+func ClearRequestRecords() error {
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&RequestRecordBlobLink{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&RequestRecordBlob{}).Error; err != nil {
+			return err
+		}
+		return tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&RequestRecord{}).Error
+	})
+}
+
 func GetRequestRecord(userID int, requestID string) (*RequestRecord, error) {
 	var record RequestRecord
 	err := DB.Where("user_id = ? AND request_id = ?", userID, requestID).First(&record).Error

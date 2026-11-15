@@ -125,3 +125,21 @@ export async function fetchUpstreamRatios(request: FetchUpstreamRatiosRequest) {
   )
   return res.data
 }
+
+export async function getRequestRecordStorage() {
+  const res = await api.get<{
+    success: boolean
+    message?: string
+    data: { bytes: number; node_name?: string }
+  }>('/api/request-record/storage')
+  return res.data
+}
+
+export async function clearRequestRecords() {
+  const res = await api.post<{
+    success: boolean
+    message?: string
+    data?: { freed_bytes: number }
+  }>('/api/request-record/cleanup')
+  return res.data
+}

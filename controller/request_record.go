@@ -177,3 +177,14 @@ func GetRequestRecordingStatus(c *gin.Context) {
 	}
 	common.ApiSuccess(c, gin.H{"settings": operation_setting.GetRequestRecordSetting(), "bytes": bytes, "node_name": common.NodeName})
 }
+
+// ClearRequestRecords removes every saved request/response body and media file.
+// It is administator-only; usage logs and task summaries are kept.
+func ClearRequestRecords(c *gin.Context) {
+	freed, err := service.ClearRequestRecords()
+	if err != nil {
+		common.ApiErrorT(c, "Failed to clear request records")
+		return
+	}
+	common.ApiSuccess(c, gin.H{"freed_bytes": freed})
+}

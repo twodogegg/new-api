@@ -344,6 +344,7 @@ func SetApiRouter(router *gin.Engine) {
 			recordRoute.GET("/lookup", controller.LookupRequestRecord)
 			recordRoute.GET("/list", controller.GetRelatedRequestRecords)
 			recordRoute.GET("/storage", middleware.RootAuth(), controller.GetRequestRecordingStatus)
+			recordRoute.POST("/cleanup", middleware.RootAuth(), controller.ClearRequestRecords)
 			recordRoute.GET("/:id", controller.GetRequestRecordDetail)
 			recordRoute.GET("/:id/media/:blob", controller.GetRequestRecordMedia)
 		}
