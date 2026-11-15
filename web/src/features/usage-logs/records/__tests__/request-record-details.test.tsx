@@ -280,6 +280,38 @@ test('renders returned reasoning with an inline label', async () => {
   expect(screen.getByText('Returned reasoning')).toBeVisible()
 })
 
+test('shows a task-style detail without conversation context for non-LLM records', async () => {
+  const user = userEvent.setup()
+  const videoDetail: RequestRecordDetail = {
+    ...detail,
+    record: detail.record ? { ...detail.record, kind: 'video' } : null,
+    snapshots: [
+      {
+        stage: 'client_request',
+        content_type: 'application/json',
+        state: 'available',
+        attempt: 0,
+        body: { model: 'minimax-h3-flash', prompt: 'a cat', seconds: 4 },
+      },
+    ],
+    media: [],
+  }
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: videoDetail },
+  })
+  renderButton()
+  await user.click(screen.getByRole('button', { name: 'Request details' }))
+  expect(
+    await screen.findByRole('tab', { name: 'Request parameters and results' })
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('tab', { name: 'Request context' })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('tab', { name: 'Read conversation' })
+  ).not.toBeInTheDocument()
+})
+
 test.each([
   [{ record: null, snapshots: [], media: [] }, 'Body not captured'],
   [

@@ -194,6 +194,7 @@ function RecordDetailContent(props: {
     )
   }
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
+  const isLlm = record.kind === 'llm'
   let mediaContent = <EmptyState title={t('No saved media')} />
   if (props.detail.media.length > 0) {
     mediaContent = <RecordMediaGrid detail={props.detail} />
@@ -229,17 +230,25 @@ function RecordDetailContent(props: {
       ) : (
         <Tabs defaultValue='reading' className='min-w-0 gap-5'>
           <TabsList className='h-auto max-w-full flex-wrap justify-start'>
-            <TabsTrigger value='reading'>{t('Read conversation')}</TabsTrigger>
-            <TabsTrigger value='context'>{t('Request context')}</TabsTrigger>
+            <TabsTrigger value='reading'>
+              {isLlm
+                ? t('Read conversation')
+                : t('Request parameters and results')}
+            </TabsTrigger>
+            {isLlm && (
+              <TabsTrigger value='context'>{t('Request context')}</TabsTrigger>
+            )}
             <TabsTrigger value='inspect'>{t('Inspect request')}</TabsTrigger>
             <TabsTrigger value='media'>{t('Media')}</TabsTrigger>
           </TabsList>
           <TabsContent value='reading'>
             <RecordReader detail={props.detail} />
           </TabsContent>
-          <TabsContent value='context'>
-            <RecordContext detail={props.detail} />
-          </TabsContent>
+          {isLlm && (
+            <TabsContent value='context'>
+              <RecordContext detail={props.detail} />
+            </TabsContent>
+          )}
           <TabsContent value='inspect'>
             <RecordInspector detail={props.detail} />
           </TabsContent>

@@ -413,9 +413,10 @@ export function RecordReader(props: { detail: RequestRecordDetail }) {
             title={t('Request parameters and results')}
           />
         )}
-        {props.detail.media.length > 0 ? (
+        {props.detail.media.length > 0 && (
           <RecordMediaGrid detail={props.detail} />
-        ) : (
+        )}
+        {snapshot?.body === undefined && props.detail.media.length === 0 && (
           <EmptyState
             title={t('No readable conversation')}
             description={t(
