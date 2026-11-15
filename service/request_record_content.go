@@ -182,9 +182,22 @@ func (content *requestRecordContent) normalize(value gjson.Result, path string, 
 	}
 	// Capture media URLs from structured media fields, not links embedded in
 	// prompts, tool results or ordinary prose. Fetching uses the shared SSRF guard.
+	// Plugin reference fields (input_reference/image/reference_image/...) carry a
+	// bare URL string rather than a nested {url}, so treat those names as media.
+	referenceField := slices.Contains(
+		[]string{"input_reference", "image", "image_url", "reference_image", "first_frame_image", "last_frame_image"},
+		strings.ToLower(path[strings.LastIndex(path, "/")+1:]),
+	)
+	isHTTPURL := strings.HasPrefix(text, "https://") || strings.HasPrefix(text, "http://")
+	if referenceField && isHTTPURL {
+		if media, err := content.downloadMedia(text, path); err == nil {
+			return media
+		}
+		return map[string]any{"_record_media": "", "state": "unavailable", "source": requestRecordSafeURL(text)}
+	}
 	if (strings.HasSuffix(path, "/url") || strings.HasSuffix(path, "/image_url") || strings.HasSuffix(path, "/video_url") || strings.HasSuffix(path, "/audio_url") || strings.HasSuffix(path, "/result_url")) &&
 		(strings.Contains(path, "/data/") || strings.Contains(path, "image_url") || strings.Contains(path, "video_url") || strings.Contains(path, "audio_url") || strings.Contains(path, "/video/") || strings.Contains(path, "/audio/") || strings.HasSuffix(path, "/result_url")) &&
-		(strings.HasPrefix(text, "https://") || strings.HasPrefix(text, "http://")) {
+		isHTTPURL {
 		if media, err := content.downloadMedia(text, path); err == nil {
 			return media
 		}
