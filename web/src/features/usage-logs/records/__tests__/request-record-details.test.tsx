@@ -362,6 +362,51 @@ test('folds many tool calls in the model response into a collapsed group', async
   ).toHaveLength(2)
 })
 
+test('folds tool calls in the input conversation history', async () => {
+  const user = userEvent.setup()
+  const convDetail: RequestRecordDetail = {
+    ...detail,
+    snapshots: detail.snapshots.map((snapshot) =>
+      snapshot.stage === 'client_request'
+        ? {
+            ...snapshot,
+            body: {
+              messages: [
+                { role: 'user', content: 'hello' },
+                {
+                  role: 'assistant',
+                  tool_calls: [
+                    {
+                      id: 't1',
+                      function: { name: 'bash', arguments: '{"cmd":"ls"}' },
+                    },
+                  ],
+                },
+                { role: 'tool', tool_call_id: 't1', content: 'file.txt' },
+                { role: 'assistant', content: 'final answer' },
+              ],
+            },
+          }
+        : snapshot
+    ),
+  }
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: convDetail },
+  })
+  renderButton()
+  await user.click(screen.getByRole('button', { name: 'Request details' }))
+  expect(await screen.findByText('hello')).toBeVisible()
+  const group = screen.getByRole('button', { name: /Tools/ })
+  expect(group).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: /Tool (call|result)/ })
+  ).not.toBeInTheDocument()
+  await user.click(group)
+  expect(
+    await screen.findAllByRole('button', { name: /Tool (call|result)/ })
+  ).toHaveLength(2)
+})
+
 test.each([
   [{ record: null, snapshots: [], media: [] }, 'Body not captured'],
   [

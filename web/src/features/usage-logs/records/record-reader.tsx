@@ -388,6 +388,41 @@ function ToolReplyGroup(props: {
   )
 }
 
+function ConversationList(props: {
+  messages: RecordMessage[]
+  recordId?: number
+}) {
+  const nodes: React.ReactNode[] = []
+  let toolBuffer: RecordMessage[] = []
+  const flushTools = (suffix: string) => {
+    if (!toolBuffer.length) return
+    nodes.push(
+      <ToolReplyGroup
+        key={`tools:${suffix}`}
+        messages={toolBuffer}
+        recordId={props.recordId}
+      />
+    )
+    toolBuffer = []
+  }
+  props.messages.forEach((message, index) => {
+    if (message.kind === 'tool') {
+      toolBuffer.push(message)
+      return
+    }
+    flushTools(message.id ?? String(index))
+    nodes.push(
+      <RecordMessageItem
+        key={message.id ?? String(index)}
+        message={message}
+        recordId={props.recordId}
+      />
+    )
+  })
+  flushTools('end')
+  return <div className='space-y-3'>{nodes}</div>
+}
+
 function ReaderSection(props: {
   label: string
   children: React.ReactNode
@@ -494,21 +529,20 @@ export function RecordReader(props: { detail: RequestRecordDetail }) {
           <ReminderPanel key={message.id} message={message} />
         ))}
         {toolList.length > 0 && <ToolDefinitions tools={toolList} />}
-        {conversation.length > 0
-          ? conversation.map((message) => (
-              <RecordMessageItem
-                key={message.id}
-                message={message}
-                recordId={props.detail.record?.id}
-              />
-            ))
-          : instructions.length === 0 &&
-            reminders.length === 0 &&
-            toolList.length === 0 && (
-              <p className='text-muted-foreground text-sm'>
-                {t('No readable conversation')}
-              </p>
-            )}
+        {conversation.length > 0 ? (
+          <ConversationList
+            messages={conversation}
+            recordId={props.detail.record?.id}
+          />
+        ) : (
+          instructions.length === 0 &&
+          reminders.length === 0 &&
+          toolList.length === 0 && (
+            <p className='text-muted-foreground text-sm'>
+              {t('No readable conversation')}
+            </p>
+          )
+        )}
       </ReaderSection>
       <ReaderSection
         label={t('Model response')}
