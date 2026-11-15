@@ -27,6 +27,11 @@ import { ErrorState } from '@/components/error-state'
 import { LoadingState } from '@/components/loading-state'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toIntlLocale } from '@/i18n/languages'
@@ -38,6 +43,7 @@ import {
   getTaskRequestRecords,
   lookupRequestRecord,
 } from './api'
+import { responseRecordMessages } from './messages'
 import { RecordContext } from './record-context'
 import { RecordMediaGrid } from './record-media'
 import { RecordJSON, RecordReader } from './record-reader'
@@ -65,7 +71,7 @@ function recordStateLabel(state: string) {
 }
 
 function RecordInspector(props: { detail: RequestRecordDetail }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [index, setIndex] = useState(0)
   const selected = props.detail.snapshots[index]
   const labels: Record<string, string> = {
@@ -75,41 +81,95 @@ function RecordInspector(props: { detail: RequestRecordDetail }) {
     client_response: 'Client response',
     task_result: 'Task result',
   }
+  const isRawStream =
+    selected?.content_type === 'text/event-stream' &&
+    Array.isArray(selected.body)
+  const mergedStream = isRawStream
+    ? responseRecordMessages(selected).map((message) => ({
+        role: message.role,
+        kind: message.kind,
+        ...(message.name ? { name: message.name } : {}),
+        text: message.text,
+      }))
+    : null
+  const rawFrameCount = Array.isArray(selected?.body) ? selected.body.length : 0
+  let content: React.ReactNode
+  if (mergedStream && mergedStream.length > 0) {
+    content = (
+      <div className='space-y-3'>
+        <RecordJSON value={mergedStream} title={t('Model response')} />
+        <Collapsible className='rounded-lg border'>
+          <CollapsibleTrigger
+            render={
+              <Button
+                variant='ghost'
+                className='h-auto w-full justify-start px-3 py-2 text-left text-xs font-normal'
+              />
+            }
+          >
+            {t('Raw stream frames')} ·{' '}
+            {formatNumber(
+              rawFrameCount,
+              toIntlLocale(i18n.resolvedLanguage || i18n.language)
+            )}
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className='border-t p-2'>
+              <RecordJSON
+                value={selected?.body}
+                title={t('Raw stream frames')}
+              />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </div>
+    )
+  } else if (selected?.body !== undefined) {
+    content = (
+      <RecordJSON
+        value={selected.body}
+        title={t(labels[selected.stage] ?? 'Snapshot')}
+      />
+    )
+  } else {
+    content = (
+      <EmptyState
+        title={t(recordStateLabel(selected?.state ?? 'not_captured'))}
+      />
+    )
+  }
   return (
-    <div className='grid min-w-0 gap-4 md:grid-cols-[12rem_minmax(0,1fr)]'>
-      <div className='flex flex-wrap gap-2 md:flex-col'>
+    <div className='grid min-w-0 gap-4 md:grid-cols-[13rem_minmax(0,1fr)]'>
+      <nav
+        className='flex flex-wrap gap-1.5 md:flex-col'
+        aria-label={t('Inspect request')}
+      >
         {props.detail.snapshots.map((snapshot, i) => (
           <Button
             key={`${snapshot.stage}:${snapshot.attempt}`}
             variant={index === i ? 'secondary' : 'ghost'}
-            className='justify-start text-left text-xs'
+            className='h-auto justify-start rounded-lg px-3 py-2 text-left text-xs font-normal'
             aria-pressed={index === i}
             onClick={() => setIndex(i)}
           >
-            {t(labels[snapshot.stage] ?? 'Snapshot')}
-            {snapshot.stage.startsWith('upstream_')
-              ? ` · ${snapshot.attempt + 1}`
-              : ''}
+            <span className='truncate'>
+              {t(labels[snapshot.stage] ?? 'Snapshot')}
+              {snapshot.stage.startsWith('upstream_')
+                ? ` · ${snapshot.attempt + 1}`
+                : ''}
+            </span>
           </Button>
         ))}
-      </div>
+      </nav>
       <div className='min-w-0 space-y-3'>
         {selected && (
-          <p className='text-muted-foreground text-xs'>
-            {selected.content_type} · {t(recordStateLabel(selected.state))}
-            {selected.status ? ` · HTTP ${selected.status}` : ''}
-          </p>
+          <div className='text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs'>
+            <span>{selected.content_type}</span>
+            <span>{t(recordStateLabel(selected.state))}</span>
+            {selected.status ? <span>{`HTTP ${selected.status}`}</span> : null}
+          </div>
         )}
-        {selected?.body !== undefined ? (
-          <RecordJSON
-            value={selected.body}
-            title={t(labels[selected.stage] ?? 'Snapshot')}
-          />
-        ) : (
-          <EmptyState
-            title={t(recordStateLabel(selected?.state ?? 'not_captured'))}
-          />
-        )}
+        {content}
       </div>
     </div>
   )

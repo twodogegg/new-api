@@ -117,13 +117,7 @@ func (job *requestRecordJob) persist() error {
 			job.record.BodyState = "truncated"
 		}
 		if body != nil {
-			var packed any
-			var err error
-			if input.ContentType == "text/event-stream" {
-				packed, err = content.splitStream(body.([]any))
-			} else {
-				packed, err = content.split(body)
-			}
+			packed, err := content.split(body)
 			if err != nil {
 				snapshot.State, job.record.BodyState = "truncated", "truncated"
 			} else if encoded, err := common.Marshal(packed); err != nil {

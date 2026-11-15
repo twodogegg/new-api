@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { ChevronDown, Wrench } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -36,6 +37,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import { toIntlLocale } from '@/i18n/languages'
+import { formatNumber } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 import {
   recordObject,
@@ -61,6 +65,170 @@ export function RecordJSON(props: { value: unknown; title: string }) {
   )
 }
 
+function PanelCount(props: { value: number; label: string }) {
+  const { i18n } = useTranslation()
+  return (
+    <span className='text-muted-foreground shrink-0 text-xs font-medium'>
+      {formatNumber(
+        props.value,
+        toIntlLocale(i18n.resolvedLanguage || i18n.language)
+      )}{' '}
+      {props.label}
+    </span>
+  )
+}
+
+function ReaderPanel(props: {
+  title: string
+  count: number
+  countLabel?: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const { t } = useTranslation()
+  return (
+    <Collapsible
+      defaultOpen={props.defaultOpen}
+      className='bg-muted/20 overflow-hidden rounded-xl border'
+    >
+      <CollapsibleTrigger
+        render={
+          <Button
+            variant='ghost'
+            className='group h-auto w-full justify-between gap-3 rounded-none px-3 py-2.5 text-left font-medium'
+          />
+        }
+      >
+        <span className='flex min-w-0 items-center gap-2'>
+          <ChevronDown className='text-muted-foreground size-4 shrink-0 -rotate-90 transition-transform group-data-[panel-open]:rotate-0' />
+          <span className='truncate'>{props.title}</span>
+        </span>
+        <PanelCount
+          value={props.count}
+          label={props.countLabel ?? t('characters')}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className='border-t px-3 py-2'>{props.children}</div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+function ReaderCode(props: { text: string; language: string }) {
+  return (
+    <CodeBlock
+      code={props.text}
+      language={props.language}
+      showLineNumbers={false}
+      collapsedLines={18}
+      maxExpandedLines={48}
+      className='my-1'
+    >
+      <CodeBlockCopyButton />
+    </CodeBlock>
+  )
+}
+
+function InstructionPanel(props: { message: RecordMessage }) {
+  const { t } = useTranslation()
+  const message = props.message
+  let label = t('System instructions')
+  if (message.role === 'developer') label = t('Developer instructions')
+  return (
+    <ReaderPanel
+      title={message.name ? `${label} · ${message.name}` : label}
+      count={message.text.length}
+      defaultOpen={message.text.length <= 800}
+    >
+      <ReaderCode text={message.text} language='text' />
+    </ReaderPanel>
+  )
+}
+
+function ReminderPanel(props: { message: RecordMessage }) {
+  const { t } = useTranslation()
+  return (
+    <ReaderPanel
+      title={t('System reminder')}
+      count={props.message.text.length}
+      defaultOpen={false}
+    >
+      <ReaderCode text={props.message.text} language='text' />
+    </ReaderPanel>
+  )
+}
+
+function ToolCallPanel(props: { message: RecordMessage }) {
+  const { t } = useTranslation()
+  const label =
+    props.message.role === 'tool' ? t('Tool result') : t('Tool call')
+  return (
+    <ReaderPanel
+      title={props.message.name ? `${label} · ${props.message.name}` : label}
+      count={props.message.text.length}
+      defaultOpen={false}
+    >
+      <ReaderCode text={props.message.text} language='json' />
+    </ReaderPanel>
+  )
+}
+
+function ToolDefinitions(props: { tools: unknown[] }) {
+  const { t } = useTranslation()
+  return (
+    <ReaderPanel
+      title={t('Tool definitions')}
+      count={props.tools.length}
+      countLabel={t('Tools')}
+      defaultOpen={false}
+    >
+      <div className='space-y-1'>
+        {props.tools.map((tool, index) => {
+          const object = recordObject(tool)
+          const definition = recordObject(object.function ?? object)
+          const name = String(definition.name ?? object.name ?? `#${index + 1}`)
+          const description =
+            typeof definition.description === 'string'
+              ? definition.description
+              : ''
+          return (
+            <Collapsible
+              key={`${name}:${JSON.stringify(tool)}`}
+              className='rounded-lg border'
+            >
+              <CollapsibleTrigger
+                render={
+                  <Button
+                    variant='ghost'
+                    className='group h-auto w-full justify-start gap-2 rounded-lg px-3 py-2 text-left font-normal'
+                  />
+                }
+              >
+                <Wrench className='text-muted-foreground size-3.5 shrink-0' />
+                <span className='flex min-w-0 flex-1 flex-col'>
+                  <span className='truncate font-mono text-xs'>{name}</span>
+                  {description && (
+                    <span className='text-muted-foreground truncate text-xs font-normal'>
+                      {description}
+                    </span>
+                  )}
+                </span>
+                <ChevronDown className='text-muted-foreground size-4 shrink-0 -rotate-90 transition-transform group-data-[panel-open]:rotate-0' />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className='border-t px-2 py-2'>
+                  <RecordJSON value={tool} title={name} />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )
+        })}
+      </div>
+    </ReaderPanel>
+  )
+}
+
 function RecordMessageItem(props: { message: RecordMessage }) {
   const { t } = useTranslation()
   const message = props.message
@@ -72,45 +240,14 @@ function RecordMessageItem(props: { message: RecordMessage }) {
       </Reasoning>
     )
   }
-  if (
-    message.kind === 'tool' ||
-    message.role === 'system' ||
-    message.role === 'developer'
-  ) {
-    let label = t('System instructions')
-    if (message.role === 'developer') label = t('Developer instructions')
-    if (message.kind === 'tool') {
-      label = message.role === 'tool' ? t('Tool result') : t('Tool call')
-    }
-    return (
-      <Collapsible>
-        <CollapsibleTrigger
-          render={
-            <Button
-              variant='ghost'
-              className='max-w-full justify-start overflow-hidden text-left'
-            />
-          }
-        >
-          <span className='truncate'>
-            {label}
-            {message.name ? ` · ${message.name}` : ''}
-          </span>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <CodeBlock
-            code={message.text}
-            language={message.kind === 'tool' ? 'json' : 'text'}
-            title={label}
-            showToolbar
-            collapsedLines={16}
-            maxExpandedLines={80}
-          >
-            <CodeBlockCopyButton />
-          </CodeBlock>
-        </CollapsibleContent>
-      </Collapsible>
-    )
+  if (message.kind === 'reminder') {
+    return <ReminderPanel message={message} />
+  }
+  if (message.kind === 'tool') {
+    return <ToolCallPanel message={message} />
+  }
+  if (message.role === 'system' || message.role === 'developer') {
+    return <InstructionPanel message={message} />
   }
   const role = message.role === 'user' ? 'user' : 'assistant'
   let label = t('Message')
@@ -118,11 +255,31 @@ function RecordMessageItem(props: { message: RecordMessage }) {
   if (message.role === 'assistant') label = t('Assistant')
   return (
     <Message from={role}>
-      <MessageContent variant='flat' className='min-w-0 space-y-2 py-3'>
-        <span className='text-muted-foreground text-xs'>{label}</span>
+      <MessageContent variant='flat' className='min-w-0 gap-1.5 py-1.5'>
+        <span className='text-muted-foreground text-xs font-medium'>
+          {label}
+        </span>
         <Response final>{message.text}</Response>
       </MessageContent>
     </Message>
+  )
+}
+
+function ReaderSection(props: {
+  label: string
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <section
+      className={cn('space-y-3', props.className)}
+      aria-label={props.label}
+    >
+      <h3 className='text-muted-foreground text-xs font-medium tracking-wide uppercase'>
+        {props.label}
+      </h3>
+      {props.children}
+    </section>
   )
 }
 
@@ -144,6 +301,19 @@ export function RecordReader(props: { detail: RequestRecordDetail }) {
     return { ...message, id: `${key}:${occurrence}` }
   })
   const tools = recordObject(input?.body).tools
+  const toolList = Array.isArray(tools) ? tools : []
+  const reminders = messages.filter((message) => message.kind === 'reminder')
+  const instructions = messages.filter(
+    (message) =>
+      (message.role === 'system' || message.role === 'developer') &&
+      message.kind !== 'reminder'
+  )
+  const conversation = messages.filter(
+    (message) =>
+      message.role !== 'system' &&
+      message.role !== 'developer' &&
+      message.kind !== 'reminder'
+  )
   const isConversation =
     props.detail.record?.kind === 'llm' &&
     (messages.length > 0 || replies.length > 0)
@@ -175,33 +345,29 @@ export function RecordReader(props: { detail: RequestRecordDetail }) {
     )
   }
   return (
-    <div className='space-y-5'>
-      <section className='space-y-3' aria-label={t('Input context')}>
-        <h3 className='text-muted-foreground text-xs font-medium'>
-          {t('Input context')}
-        </h3>
-        {messages.map((message) => (
-          <RecordMessageItem key={message.id} message={message} />
+    <div className='mx-auto w-full max-w-3xl space-y-6'>
+      <ReaderSection label={t('Input context')}>
+        {instructions.map((message) => (
+          <InstructionPanel key={message.id} message={message} />
         ))}
-        {Array.isArray(tools) && tools.length > 0 && (
-          <Collapsible>
-            <CollapsibleTrigger render={<Button variant='ghost' />}>
-              {t('Tool definitions')}
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <RecordJSON value={tools} title={t('Tool definitions')} />
-            </CollapsibleContent>
-          </Collapsible>
-        )}
-      </section>
-      <section
-        className='space-y-3 border-t pt-4'
-        aria-label={t('Model response')}
-      >
-        <h3 className='text-muted-foreground text-xs font-medium'>
-          {t('Model response')}
-        </h3>
-        {replies.length ? (
+        {reminders.map((message) => (
+          <ReminderPanel key={message.id} message={message} />
+        ))}
+        {toolList.length > 0 && <ToolDefinitions tools={toolList} />}
+        {conversation.length > 0
+          ? conversation.map((message) => (
+              <RecordMessageItem key={message.id} message={message} />
+            ))
+          : instructions.length === 0 &&
+            reminders.length === 0 &&
+            toolList.length === 0 && (
+              <p className='text-muted-foreground text-sm'>
+                {t('No readable conversation')}
+              </p>
+            )}
+      </ReaderSection>
+      <ReaderSection label={t('Model response')} className='border-t pt-5'>
+        {identifiedReplies.length ? (
           identifiedReplies.map((message) => (
             <RecordMessageItem key={message.id} message={message} />
           ))
@@ -210,7 +376,7 @@ export function RecordReader(props: { detail: RequestRecordDetail }) {
             {t('No readable response was captured.')}
           </p>
         )}
-      </section>
+      </ReaderSection>
     </div>
   )
 }

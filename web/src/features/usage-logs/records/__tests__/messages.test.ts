@@ -92,6 +92,33 @@ describe('request record reading', () => {
     expect(messages[3].name).toBe('call-1')
   })
 
+  test('separates an injected system reminder from the visible user message', () => {
+    expect(
+      requestRecordMessages({
+        messages: [
+          {
+            role: 'user',
+            content:
+              '<system-reminder>workspace instructions</system-reminder>\n\n测试在吗。',
+          },
+        ],
+      }).map((message) => [message.role, message.kind, message.text])
+    ).toEqual([
+      ['user', 'reminder', 'workspace instructions'],
+      ['user', 'text', '测试在吗。'],
+    ])
+    expect(
+      requestRecordMessages({
+        messages: [
+          {
+            role: 'user',
+            content: '<system-reminder>only reminder</system-reminder>',
+          },
+        ],
+      }).map((message) => [message.kind, message.text])
+    ).toEqual([['reminder', 'only reminder']])
+  })
+
   test.each([
     [
       { contents: [{ role: 'model', parts: [{ text: 'Gemini answer' }] }] },
@@ -195,6 +222,20 @@ describe('request record reading', () => {
       ],
     })
     expect(final).toEqual([{ role: 'assistant', text: 'Hello', kind: 'text' }])
+    const merged = responseRecordMessages({
+      stage: 'client_response',
+      content_type: 'text/event-stream',
+      state: 'available',
+      attempt: 0,
+      body: {
+        choices: [
+          { index: 0, message: { role: 'assistant', content: 'Merged reply' } },
+        ],
+      },
+    })
+    expect(merged).toEqual([
+      { role: 'assistant', text: 'Merged reply', kind: 'text' },
+    ])
   })
 
   test('accepts missing or unrecognized content without inventing an assistant response', () => {

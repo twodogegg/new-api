@@ -302,7 +302,7 @@ func (content *requestRecordContent) decode(input requestRecordInput) (any, stri
 			}
 			events = append(events, map[string]any{"event": name, "data": content.normalize(value, "/events/"+strconv.Itoa(len(events)), 0)})
 		}
-		return events, "available"
+		return requestRecordMergedStream(events), "available"
 	}
 	if input.Truncated {
 		return nil, "truncated"
@@ -364,66 +364,266 @@ func (content *requestRecordContent) decode(input requestRecordInput) (any, stri
 	return nil, "not_captured"
 }
 
-// Keep wire events for inspection, grouped into bounded files. The extra text
-// nodes make phrases spanning multiple deltas searchable without duplicating
-// whole request histories in the database.
-func (content *requestRecordContent) splitStream(events []any) (any, error) {
-	refs := make([]string, 0)
-	text := make(map[string]*strings.Builder)
-	for start := 0; start < len(events); start += 128 {
-		chunk := events[start:min(start+128, len(events))]
-		encoded, err := common.Marshal(chunk)
-		if err != nil {
-			return nil, err
+type requestRecordStreamToolCall struct {
+	id        string
+	name      strings.Builder
+	arguments strings.Builder
+}
+
+type requestRecordStreamChoice struct {
+	index        int
+	content      strings.Builder
+	reasoning    strings.Builder
+	finishReason string
+	toolCalls    map[int]*requestRecordStreamToolCall
+	toolOrder    []int
+}
+
+func (choice *requestRecordStreamChoice) toolCall(index int) *requestRecordStreamToolCall {
+	if call, exists := choice.toolCalls[index]; exists {
+		return call
+	}
+	call := &requestRecordStreamToolCall{}
+	choice.toolCalls[index] = call
+	choice.toolOrder = append(choice.toolOrder, index)
+	return call
+}
+
+func requestRecordValueMap(value any) map[string]any {
+	if object, ok := value.(map[string]any); ok {
+		return object
+	}
+	return nil
+}
+
+func requestRecordValueList(value any) []any {
+	if list, ok := value.([]any); ok {
+		return list
+	}
+	return nil
+}
+
+func requestRecordValueString(value any) string {
+	switch current := value.(type) {
+	case string:
+		return current
+	case common.RawMessage:
+		return string(current)
+	case []byte:
+		return string(current)
+	case int:
+		return strconv.Itoa(current)
+	case int64:
+		return strconv.FormatInt(current, 10)
+	case float64:
+		return strconv.FormatFloat(current, 'f', -1, 64)
+	default:
+		return ""
+	}
+}
+
+func requestRecordValueInt(value any) int {
+	text := requestRecordValueString(value)
+	if text == "" {
+		return 0
+	}
+	number, err := strconv.ParseFloat(text, 64)
+	if err != nil {
+		return 0
+	}
+	return int(number)
+}
+
+// applyClaudeStreamEvent folds one Anthropic Messages stream event into the
+// merged choice: text/thinking deltas append, and tool_use blocks accumulate
+// their streamed JSON input keyed by content-block index.
+func requestRecordApplyClaudeEvent(data map[string]any, choice *requestRecordStreamChoice) {
+	switch requestRecordValueString(data["type"]) {
+	case "content_block_start":
+		block := requestRecordValueMap(data["content_block"])
+		index := requestRecordValueInt(data["index"])
+		switch requestRecordValueString(block["type"]) {
+		case "text":
+			choice.content.WriteString(requestRecordValueString(block["text"]))
+		case "thinking":
+			choice.reasoning.WriteString(requestRecordValueString(block["thinking"]))
+		case "tool_use":
+			call := choice.toolCall(index)
+			call.id = requestRecordValueString(block["id"])
+			call.name.WriteString(requestRecordValueString(block["name"]))
 		}
-		id, err := content.addBlob(encoded, "application/json", requestRecordSearchText(chunk))
-		if err != nil {
-			return nil, err
+	case "content_block_delta":
+		delta := requestRecordValueMap(data["delta"])
+		index := requestRecordValueInt(data["index"])
+		switch requestRecordValueString(delta["type"]) {
+		case "text_delta":
+			choice.content.WriteString(requestRecordValueString(delta["text"]))
+		case "thinking_delta":
+			choice.reasoning.WriteString(requestRecordValueString(delta["thinking"]))
+		case "input_json_delta":
+			choice.toolCall(index).arguments.WriteString(requestRecordValueString(delta["partial_json"]))
 		}
-		refs = append(refs, id)
-		for _, event := range gjson.ParseBytes(encoded).Array() {
-			data := event.Get("data")
-			parts := make(map[string]string)
-			for _, choice := range data.Get("choices").Array() {
-				key := "choice:" + choice.Get("index").Raw
-				parts[key] += choice.Get("delta.content").String()
-				parts[key+":reasoning"] += choice.Get("delta.reasoning_content").String()
+	case "message_delta":
+		if reason := requestRecordValueString(requestRecordValueMap(data["delta"])["stop_reason"]); reason != "" {
+			choice.finishReason = reason
+		}
+	}
+}
+
+// requestRecordMergedStream reduces a streamed response to a single readable
+// result. Storing every delta would make a request record enormous, so the
+// snapshot keeps the assembled assistant reply (content, reasoning and tool
+// calls) and never the per-chunk wire frames.
+func requestRecordMergedStream(events []any) any {
+	// A completed Responses API event already carries the full response.
+	for _, item := range events {
+		data := requestRecordValueMap(requestRecordValueMap(item)["data"])
+		switch requestRecordValueString(data["type"]) {
+		case "response.completed", "response.incomplete":
+			if response := requestRecordValueMap(data["response"]); response != nil {
+				return response
 			}
-			parts["claude"] = data.Get("delta.text").String()
-			parts["claude:reasoning"] = data.Get("delta.thinking").String()
-			if data.Get("type").String() == "response.output_text.delta" || data.Get("type").String() == "response.reasoning_summary_text.delta" {
-				parts[data.Get("type").String()+":"+data.Get("output_index").Raw] = data.Get("delta").String()
+		}
+	}
+	choices := make(map[int]*requestRecordStreamChoice)
+	order := make([]int, 0)
+	getChoice := func(index int) *requestRecordStreamChoice {
+		if choice, exists := choices[index]; exists {
+			return choice
+		}
+		choice := &requestRecordStreamChoice{index: index, toolCalls: make(map[int]*requestRecordStreamToolCall)}
+		choices[index] = choice
+		order = append(order, index)
+		return choice
+	}
+	var id, model string
+	var usage any
+	for _, item := range events {
+		data := requestRecordValueMap(requestRecordValueMap(item)["data"])
+		if data == nil {
+			continue
+		}
+		if value := requestRecordValueString(data["id"]); value != "" {
+			id = value
+		}
+		if value := requestRecordValueString(data["model"]); value != "" {
+			model = value
+		}
+		if message := requestRecordValueMap(data["message"]); message != nil {
+			if value := requestRecordValueString(message["model"]); value != "" {
+				model = value
 			}
-			for _, candidate := range data.Get("candidates").Array() {
-				for _, part := range candidate.Get("content.parts").Array() {
-					parts["gemini:"+candidate.Get("index").Raw+":"+part.Get("thought").Raw] += part.Get("text").String()
+			if value := requestRecordValueString(message["id"]); value != "" {
+				id = value
+			}
+		}
+		if value, exists := data["usage"]; exists && value != nil {
+			usage = value
+		}
+
+		// OpenAI chat completions deltas.
+		for _, rawChoice := range requestRecordValueList(data["choices"]) {
+			choice := requestRecordValueMap(rawChoice)
+			if choice == nil {
+				continue
+			}
+			merged := getChoice(requestRecordValueInt(choice["index"]))
+			delta := requestRecordValueMap(choice["delta"])
+			if delta == nil {
+				delta = requestRecordValueMap(choice["message"])
+			}
+			if delta != nil {
+				merged.content.WriteString(requestRecordValueString(delta["content"]))
+				merged.reasoning.WriteString(requestRecordValueString(delta["reasoning_content"]))
+				merged.reasoning.WriteString(requestRecordValueString(delta["reasoning"]))
+				for _, rawCall := range requestRecordValueList(delta["tool_calls"]) {
+					call := requestRecordValueMap(rawCall)
+					if call == nil {
+						continue
+					}
+					mergedCall := merged.toolCall(requestRecordValueInt(call["index"]))
+					if value := requestRecordValueString(call["id"]); value != "" {
+						mergedCall.id = value
+					}
+					if function := requestRecordValueMap(call["function"]); function != nil {
+						mergedCall.name.WriteString(requestRecordValueString(function["name"]))
+						mergedCall.arguments.WriteString(requestRecordValueString(function["arguments"]))
+					}
 				}
 			}
-			for key, part := range parts {
-				if part == "" {
+			if reason := requestRecordValueString(choice["finish_reason"]); reason != "" {
+				merged.finishReason = reason
+			}
+		}
+
+		// OpenAI Responses API deltas when no completed event exists.
+		switch requestRecordValueString(data["type"]) {
+		case "response.output_text.delta":
+			getChoice(0).content.WriteString(requestRecordValueString(data["delta"]))
+		case "response.reasoning_summary_text.delta":
+			getChoice(0).reasoning.WriteString(requestRecordValueString(data["delta"]))
+		}
+
+		// Anthropic Messages deltas.
+		requestRecordApplyClaudeEvent(data, getChoice(0))
+
+		// Gemini candidate parts.
+		for _, rawCandidate := range requestRecordValueList(data["candidates"]) {
+			candidate := requestRecordValueMap(rawCandidate)
+			if candidate == nil {
+				continue
+			}
+			merged := getChoice(requestRecordValueInt(candidate["index"]))
+			content := requestRecordValueMap(candidate["content"])
+			for _, rawPart := range requestRecordValueList(content["parts"]) {
+				part := requestRecordValueMap(rawPart)
+				if part == nil {
 					continue
 				}
-				if text[key] == nil {
-					text[key] = &strings.Builder{}
+				text := requestRecordValueString(part["text"])
+				if part["thought"] == true {
+					merged.reasoning.WriteString(text)
+				} else {
+					merged.content.WriteString(text)
 				}
-				text[key].WriteString(part)
+				if function := requestRecordValueMap(part["functionCall"]); function != nil {
+					call := merged.toolCall(len(merged.toolOrder))
+					call.name.WriteString(requestRecordValueString(function["name"]))
+					if encoded, err := common.Marshal(function["args"]); err == nil {
+						call.arguments.WriteString(string(encoded))
+					}
+				}
 			}
 		}
 	}
-	for _, builder := range text {
-		packed, err := content.split(builder.String())
-		if err != nil {
-			return nil, err
+	mergedChoices := make([]any, 0, len(order))
+	for _, index := range order {
+		choice := choices[index]
+		message := map[string]any{"role": "assistant", "content": choice.content.String()}
+		if reasoning := choice.reasoning.String(); reasoning != "" {
+			message["reasoning_content"] = reasoning
 		}
-		encoded, err := common.Marshal(packed)
-		if err != nil {
-			return nil, err
+		if len(choice.toolOrder) > 0 {
+			calls := make([]any, 0, len(choice.toolOrder))
+			for _, toolIndex := range choice.toolOrder {
+				call := choice.toolCalls[toolIndex]
+				calls = append(calls, map[string]any{"id": call.id, "type": "function", "function": map[string]any{"name": call.name.String(), "arguments": call.arguments.String()}})
+			}
+			message["tool_calls"] = calls
 		}
-		if _, err := content.addBlob(encoded, "application/json", requestRecordSearchText(packed)); err != nil {
-			return nil, err
-		}
+		mergedChoices = append(mergedChoices, map[string]any{"index": index, "message": message, "finish_reason": choice.finishReason})
 	}
-	return map[string]any{"_record_events": refs}, nil
+	result := map[string]any{"object": "chat.completion", "choices": mergedChoices}
+	if id != "" {
+		result["id"] = id
+	}
+	if model != "" {
+		result["model"] = model
+	}
+	if usage != nil {
+		result["usage"] = usage
+	}
+	return result
 }
 
 // split stores each message/tool/content node once, so resubmitted history and

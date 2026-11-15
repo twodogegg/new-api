@@ -46,12 +46,35 @@ function recordText(value: unknown): string {
   return recordText(object.content ?? object.parts)
 }
 
+const SYSTEM_REMINDER_PATTERN =
+  /<system-reminder>([\s\S]*?)<\/system-reminder>/gi
+
+// Clients such as coding agents prepend workspace instructions to a user turn as
+// a <system-reminder> block. Keep that block out of the visible user message and
+// return it as its own entry so the reader can fold it away, matching what the
+// user actually typed.
+function splitSystemReminders(role: string, text: string): RecordMessage[] {
+  const messages: RecordMessage[] = []
+  let cursor = 0
+  for (const match of text.matchAll(SYSTEM_REMINDER_PATTERN)) {
+    const index = match.index ?? 0
+    const before = text.slice(cursor, index).trim()
+    if (before) messages.push({ role, text: before, kind: 'text' })
+    const reminder = (match[1] ?? '').trim()
+    if (reminder) messages.push({ role, text: reminder, kind: 'reminder' })
+    cursor = index + match[0].length
+  }
+  const rest = text.slice(cursor).trim()
+  if (rest) messages.push({ role, text: rest, kind: 'text' })
+  return messages
+}
+
 function messagesFromItem(
   item: unknown,
   fallbackRole: string
 ): RecordMessage[] {
   if (typeof item === 'string') {
-    return [{ role: fallbackRole, text: item, kind: 'text' }]
+    return splitSystemReminders(fallbackRole, item)
   }
   const object = recordObject(item)
   const role = typeof object.role === 'string' ? object.role : fallbackRole
@@ -59,15 +82,19 @@ function messagesFromItem(
   const messages: RecordMessage[] = []
   const text = recordText(content)
   if (text) {
-    messages.push({
-      role,
-      text,
-      kind: role === 'tool' ? 'tool' : 'text',
-      name:
-        typeof object.tool_call_id === 'string'
-          ? object.tool_call_id
-          : undefined,
-    })
+    if (role === 'tool') {
+      messages.push({
+        role,
+        text,
+        kind: 'tool',
+        name:
+          typeof object.tool_call_id === 'string'
+            ? object.tool_call_id
+            : undefined,
+      })
+    } else {
+      messages.push(...splitSystemReminders(role, text))
+    }
   }
   const reasoning = object.reasoning_content ?? object.reasoning
   if (typeof reasoning === 'string' && reasoning) {
@@ -167,7 +194,7 @@ export function requestRecordMessages(body: unknown): RecordMessage[] {
   if (Array.isArray(input)) {
     for (const item of input) messages.push(...messagesFromItem(item, 'user'))
   } else if (typeof input === 'string') {
-    messages.push({ role: 'user', text: input, kind: 'text' })
+    messages.push(...splitSystemReminders('user', input))
   }
   return messages.map((message, index) => ({
     ...message,
@@ -208,10 +235,12 @@ export function responseRecordMessages(
   snapshot?: RecordSnapshot
 ): RecordMessage[] {
   if (!snapshot) return []
-  if (snapshot.content_type !== 'text/event-stream') {
+  if (
+    snapshot.content_type !== 'text/event-stream' ||
+    !Array.isArray(snapshot.body)
+  ) {
     return responseMessages(snapshot.body)
   }
-  if (!Array.isArray(snapshot.body)) return []
   const outputs = new Map<string, { text: string; reasoning: string }>()
   const calls = new Map<string, { name: string; arguments: string }>()
   for (const item of snapshot.body) {

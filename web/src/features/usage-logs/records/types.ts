@@ -63,7 +63,7 @@ export interface RecordMessage {
   id?: string
   role: string
   text: string
-  kind: 'text' | 'tool' | 'reasoning'
+  kind: 'text' | 'tool' | 'reasoning' | 'reminder'
   name?: string
 }
 

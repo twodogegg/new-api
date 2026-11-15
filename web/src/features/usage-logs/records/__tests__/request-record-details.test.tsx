@@ -137,6 +137,117 @@ test('loads bodies only when opened and exposes readable roles and all four snap
   )
 })
 
+test('folds an injected system reminder out of the visible user message', async () => {
+  const user = userEvent.setup()
+  const reminderDetail: RequestRecordDetail = {
+    ...detail,
+    snapshots: detail.snapshots.map((snapshot) =>
+      snapshot.stage === 'client_request'
+        ? {
+            ...snapshot,
+            body: {
+              messages: [
+                {
+                  role: 'user',
+                  content:
+                    '<system-reminder>hidden workspace instructions</system-reminder>\n\nHello there',
+                },
+              ],
+            },
+          }
+        : snapshot
+    ),
+  }
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: reminderDetail },
+  })
+  renderButton()
+  await user.click(screen.getByRole('button', { name: 'Request details' }))
+  expect(await screen.findByText('Hello there')).toBeVisible()
+  const panel = screen.getByRole('button', { name: /System reminder/ })
+  expect(panel).toBeVisible()
+  const folded = screen.queryByText(/hidden workspace instructions/)
+  if (folded) expect(folded).not.toBeVisible()
+  await user.click(panel)
+  expect(await screen.findByText(/hidden workspace instructions/)).toBeVisible()
+})
+
+test('reads a merged stream response saved with a stream content type', async () => {
+  const user = userEvent.setup()
+  const streamDetail: RequestRecordDetail = {
+    ...detail,
+    snapshots: detail.snapshots.map((snapshot) =>
+      snapshot.stage === 'client_response'
+        ? {
+            ...snapshot,
+            content_type: 'text/event-stream',
+            body: {
+              choices: [
+                {
+                  index: 0,
+                  message: { role: 'assistant', content: 'Hello world' },
+                },
+              ],
+            },
+          }
+        : snapshot
+    ),
+  }
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: streamDetail },
+  })
+  renderButton()
+  await user.click(screen.getByRole('button', { name: 'Request details' }))
+  expect(await screen.findByText('Hello world')).toBeVisible()
+  await user.click(screen.getByRole('tab', { name: 'Inspect request' }))
+  await user.click(screen.getByRole('button', { name: 'Client response' }))
+  expect(screen.getByRole('textbox', { name: 'Client response' })).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: /Raw stream frames/ })
+  ).not.toBeInTheDocument()
+})
+
+test('folds legacy raw stream frames into a merged view during inspection', async () => {
+  const user = userEvent.setup()
+  const legacyDetail: RequestRecordDetail = {
+    ...detail,
+    snapshots: detail.snapshots.map((snapshot) =>
+      snapshot.stage === 'client_response'
+        ? {
+            ...snapshot,
+            content_type: 'text/event-stream',
+            body: [
+              {
+                event: '',
+                data: { choices: [{ index: 0, delta: { content: 'Hello' } }] },
+              },
+              {
+                event: '',
+                data: {
+                  choices: [{ index: 0, delta: { content: ' world' } }],
+                },
+              },
+            ],
+          }
+        : snapshot
+    ),
+  }
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: legacyDetail },
+  })
+  renderButton()
+  await user.click(screen.getByRole('button', { name: 'Request details' }))
+  expect(await screen.findByText('Hello world')).toBeVisible()
+  await user.click(screen.getByRole('tab', { name: 'Inspect request' }))
+  await user.click(screen.getByRole('button', { name: 'Client response' }))
+  expect(
+    screen.getByRole('button', { name: /Raw stream frames/ })
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('textbox', { name: 'Raw stream frames' })
+  ).not.toBeInTheDocument()
+})
+
 test.each([
   [{ record: null, snapshots: [], media: [] }, 'Body not captured'],
   [
