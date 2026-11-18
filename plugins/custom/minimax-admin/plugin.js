@@ -15,6 +15,9 @@ const MODEL_ALIASES = {
   "h3-pika": "h3",
   "h3-nsfw-opt": "h3-nsfw",
 };
+// 素材上传与模型无关，但 new-api 的 submit 意图必须带一个本插件拥有的模型名。
+// 客户端不一定发 model 字段（PLOT 只发 file），所以这里兜底。
+const DEFAULT_UPLOAD_MODEL = "h3";
 const RATIOS = ["adaptive", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"];
 const RESOLUTION_TIERS = ["480P", "576P", "720P", "768P", "1080P"];
 
@@ -23,7 +26,7 @@ export const meta = {
   key: "minimax-admin",
   name: "MiniMax Admin (H3)",
   icon: "text:MM",
-  version: "1.1.0",
+  version: "1.3.0",
   author: { name: "twodogegg" },
   description: {
     en: "MiniMax H3 video generation on a self-hosted minimax-admin service, with asset upload and reference ids",
@@ -156,7 +159,14 @@ export function parseSubmitResponse(ctx, response) {
   const body = response && response.body;
   if (ctx.action === ASSET_UPLOAD_ACTION) {
     if (!object(body) || typeof body.id !== "string" || !body.id) throw new Error("素材上传失败：上游没有返回素材 ID");
-    return { taskId: body.id, taskData: body, immediate: { status: "SUCCESS", progress: "100%" } };
+    // new-api 会把 taskData 里的 id/task_id/taskId 改写成它自己的公开任务 ID，
+    // 真正的素材别名会因此丢失。这里额外存一份 asset_id，它不在改写白名单里，
+    // 客户端（如 PLOT）应优先用它来引用素材。
+    return {
+      taskId: body.id,
+      taskData: Object.assign({}, body, { asset_id: body.id }),
+      immediate: { status: "SUCCESS", progress: "100%" },
+    };
   }
   if (!object(body)) throw new Error("MiniMax Admin 提交失败：响应不是对象");
   const taskId = body.id || body.task_id;
@@ -226,18 +236,26 @@ export const native = {
     if (!Array.isArray(ctx.body.files) || ctx.body.files.length !== 1) throw new Error("exactly one file is required");
     const file = ctx.body.files[0];
     if (file.field !== "file") throw new Error("file field is required");
+    // multipart 时 ctx.model 可能为空（new-api 只在客户端发了 model 字段时才回填），
+    // 依次取：ctx 里的模型 → 客户端表单字段 → 默认模型。
+    const fields = object(ctx.body.fields) ? ctx.body.fields : {};
+    const declared = Array.isArray(fields.model) ? fields.model[0] : fields.model;
+    const model = modelFor(ctx) || declared || DEFAULT_UPLOAD_MODEL;
     return {
       kind: "submit",
-      model: modelFor(ctx),
+      model: model,
       action: ASSET_UPLOAD_ACTION,
       requestBody: { fileRef: file.ref, filename: file.filename, mimeType: file.mimeType, size: file.size },
     };
   },
   assetUploaded: function (_ctx, task) {
     const data = object(task && task.data) ? task.data : {};
-    if (typeof data.id !== "string" || !data.id) throw new Error("MiniMax Admin 没有返回素材 ID");
+    // asset_id 是上游真别名；id 可能已被宿主改写成本地任务 ID。
+    const assetId = typeof data.asset_id === "string" && data.asset_id ? data.asset_id : data.id;
+    if (typeof assetId !== "string" || !assetId) throw new Error("MiniMax Admin 没有返回素材 ID");
     return {
-      id: data.id,
+      id: assetId,
+      asset_id: assetId,
       type: typeof data.type === "string" ? data.type : "",
       size: typeof data.size === "number" || typeof data.size === "string" ? data.size : "",
       expires_in: typeof data.expires_in === "number" ? data.expires_in : 86400,
