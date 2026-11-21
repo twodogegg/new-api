@@ -25,6 +25,29 @@ export function recordObject(value: unknown): Record<string, unknown> {
   return {}
 }
 
+// Tool payloads are captured exactly as the client sent them, so a JSON result
+// is one compressed line with escaped line breaks. Pretty-print a copy for
+// reading; the stored payload stays untouched.
+export function formatToolPayload(text: string): string {
+  const raw = text.trim()
+  if (!raw) return text
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return text
+  }
+  if (parsed === null || typeof parsed !== 'object') return text
+  return JSON.stringify(parsed, null, 2).replaceAll(
+    /\\r\\n|\\n|\\t|\\\\/g,
+    (match) => {
+      if (match === '\\\\') return match
+      if (match === '\\t') return '\t'
+      return '\n'
+    }
+  )
+}
+
 function recordText(value: unknown): string {
   if (typeof value === 'string') return value
   if (Array.isArray(value)) {

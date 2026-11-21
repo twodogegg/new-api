@@ -20,7 +20,11 @@ import { describe, expect, test } from 'vitest'
 
 import { buildSearchParams } from '../../lib/filter'
 import { buildApiParams } from '../../lib/utils'
-import { requestRecordMessages, responseRecordMessages } from '../messages'
+import {
+  formatToolPayload,
+  requestRecordMessages,
+  responseRecordMessages,
+} from '../messages'
 
 describe('request record reading', () => {
   test('keeps Claude tool results and Gemini thoughts separate from ordinary text', () => {
@@ -274,6 +278,16 @@ describe('request record reading', () => {
     expect(merged).toEqual([
       { role: 'assistant', text: 'Merged reply', kind: 'text' },
     ])
+  })
+
+  test('pretty-prints a stored tool payload for reading without touching storage', () => {
+    const payload =
+      '{"error":null,"output":{"content":"# 剧本正文\\n\\n第 001 集: 重返2048"}}'
+    expect(formatToolPayload(payload)).toBe(
+      '{\n  "error": null,\n  "output": {\n    "content": "# 剧本正文\n\n第 001 集: 重返2048"\n  }\n}'
+    )
+    expect(formatToolPayload('Warm street light')).toBe('Warm street light')
+    expect(formatToolPayload('{"truncated":')).toBe('{"truncated":')
   })
 
   test('accepts missing or unrecognized content without inventing an assistant response', () => {

@@ -45,6 +45,7 @@ import { cn } from '@/lib/utils'
 
 import { getRecordMedia } from './api'
 import {
+  formatToolPayload,
   recordObject,
   requestRecordMessages,
   responseRecordMessages,
@@ -176,7 +177,10 @@ function ToolCallPanel(props: { message: RecordMessage }) {
       count={props.message.text.length}
       defaultOpen={false}
     >
-      <ReaderCode text={props.message.text} language='json' />
+      <ReaderCode
+        text={formatToolPayload(props.message.text)}
+        language='json'
+      />
     </ReaderPanel>
   )
 }
