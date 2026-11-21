@@ -50,6 +50,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BundledLanguage } from 'shiki'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -57,6 +58,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { copyToClipboard } from '@/lib/copy-to-clipboard'
 import { cn } from '@/lib/utils'
 
 type CodeBlockProps = HTMLAttributes<HTMLDivElement> & {
@@ -652,20 +654,20 @@ export const CodeBlockCopyButton = ({
   const [isCopied, setIsCopied] = useState(false)
   const { code } = useContext(CodeBlockContext)
 
-  const copyToClipboard = async () => {
-    if (typeof window === 'undefined' || !navigator?.clipboard?.writeText) {
+  const copyCode = async () => {
+    // The async Clipboard API is unavailable over plain HTTP and inside
+    // iframes without clipboard permission, so rely on the shared helper that
+    // falls back to document.execCommand.
+    const copied = await copyToClipboard(code)
+    if (!copied) {
       onError?.(new Error('Clipboard API not available'))
+      toast.error(t('Failed to copy to clipboard'))
       return
     }
 
-    try {
-      await navigator.clipboard.writeText(code)
-      setIsCopied(true)
-      onCopy?.()
-      setTimeout(() => setIsCopied(false), timeout)
-    } catch (error) {
-      onError?.(error as Error)
-    }
+    setIsCopied(true)
+    onCopy?.()
+    setTimeout(() => setIsCopied(false), timeout)
   }
 
   const Icon = isCopied ? CheckIcon : CopyIcon
@@ -674,7 +676,7 @@ export const CodeBlockCopyButton = ({
     <Button
       aria-label={isCopied ? t('Copied!') : t('Copy code')}
       className={cn('size-8 shrink-0', className)}
-      onClick={copyToClipboard}
+      onClick={copyCode}
       size='icon-sm'
       type='button'
       variant='ghost'
