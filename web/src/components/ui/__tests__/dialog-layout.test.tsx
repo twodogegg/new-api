@@ -104,4 +104,37 @@ describe('dialog viewport layout', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
     expect(onConfirm).toHaveBeenCalledOnce()
   })
+
+  test('offers jump-to-edge controls for a long dialog body', async () => {
+    // jsdom has no layout, so fake the scroll metrics the controls read.
+    const scrollHeight = vi
+      .spyOn(Element.prototype, 'scrollHeight', 'get')
+      .mockReturnValue(1200)
+    const clientHeight = vi
+      .spyOn(Element.prototype, 'clientHeight', 'get')
+      .mockReturnValue(400)
+    const scrollTo = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+      configurable: true,
+      value: scrollTo,
+    })
+
+    render(
+      <Dialog open title='Long conversation' scrollControls>
+        <p>Long conversation content</p>
+      </Dialog>
+    )
+
+    const toTop = await screen.findByRole('button', { name: 'Scroll to top' })
+    const toBottom = screen.getByRole('button', { name: 'Scroll to bottom' })
+    expect(toTop).toBeDisabled()
+    expect(toBottom).toBeEnabled()
+
+    await userEvent.click(toBottom)
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1200, behavior: 'smooth' })
+
+    scrollHeight.mockRestore()
+    clientHeight.mockRestore()
+    delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo
+  })
 })

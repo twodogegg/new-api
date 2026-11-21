@@ -358,6 +358,7 @@ function RequestRecordDialog(
       description={props.taskId ?? props.requestId}
       contentClassName='sm:max-w-6xl'
       contentHeight='min(74dvh, 900px)'
+      scrollControls
     >
       {feedback ?? (
         <div className='min-w-0 space-y-5'>
