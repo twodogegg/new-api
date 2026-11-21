@@ -53,7 +53,11 @@ func (fixture recordingFixture) capture(owner int, requestID, format, path, cont
 	require.NoError(t, err)
 	upstream.Header.Set("Content-Type", "application/json")
 	observe := service.CaptureRequestRecordUpstream(c, upstream)
-	upstreamResponse := &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"choices":[{"message":{"role":"assistant","content":"upstream answer"}}]}`))}
+	upstreamType, upstreamBody := "application/json", `{"choices":[{"message":{"role":"assistant","content":"upstream answer"}}]}`
+	if responseType == "text/event-stream" {
+		upstreamType, upstreamBody = responseType, response
+	}
+	upstreamResponse := &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{upstreamType}}, Body: io.NopCloser(strings.NewReader(upstreamBody))}
 	observe(upstreamResponse)
 	_, err = io.ReadAll(upstreamResponse.Body)
 	require.NoError(t, err)
@@ -240,6 +244,21 @@ func TestRequestRecording(t *testing.T) {
 				longMessage, ok := longChoices[0].(map[string]any)["message"].(map[string]any)
 				require.True(t, ok)
 				assert.Equal(t, strings.Repeat("a", 5000), longMessage["content"], "a long stream must merge into one reply instead of one file per chunk")
+				toolStream := strings.Repeat("data: {\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"a\"}}]}\n\n", 251000) +
+					"data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"type\":\"function\",\"function\":{\"name\":\"submit_assets\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n"
+				require.Greater(t, len(toolStream), 16<<20) // The configured capture limit applies to stored data, not SSE framing.
+				toolRow := fixture.capture(1, "long-tool-stream", "openai", "/v1/chat/completions", "application/json", body, "text/event-stream", toolStream, nil)
+				toolDetail, err := service.LoadRequestRecordDetail(toolRow)
+				require.NoError(t, err)
+				assert.Equal(t, "available", toolRow.BodyState)
+				for _, index := range []int{2, 3} {
+					encoded, err := common.Marshal(toolDetail.Snapshots[index].Body)
+					require.NoError(t, err)
+					assert.Contains(t, string(encoded), strings.Repeat("a", 251000))
+					assert.Contains(t, string(encoded), `"name":"submit_assets"`)
+					assert.Contains(t, string(encoded), `"arguments":"{}"`)
+					assert.Contains(t, string(encoded), `"finish_reason":"tool_calls"`)
+				}
 				row = fixture.capture(1, "truncated-record", "openai", "/v1/chat/completions", "application/json", body, "application/json", strings.Repeat("x", (1<<20)+1), nil)
 				assert.Equal(t, "truncated", row.BodyState)
 				detail, err = service.LoadRequestRecordDetail(row)

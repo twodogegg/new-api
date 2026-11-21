@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"compress/gzip"
 	"io"
 	"mime"
 	"net/http"
@@ -25,24 +26,57 @@ const requestRecordContextKey = "request_record_capture"
 var requestRecordMemory atomic.Int64
 
 type requestRecordBuffer struct {
-	mu        sync.Mutex
-	data      []byte
-	written   int64
-	limit     int
-	startedAt time.Time
+	mu         sync.Mutex
+	data       []byte
+	written    int64
+	limit      int
+	startedAt  time.Time
+	compressed bool
+	compressor *gzip.Writer
+	truncated  bool
+}
+
+// requestRecordCompressedSink is called while the buffer lock is held.
+type requestRecordCompressedSink struct{ buffer *requestRecordBuffer }
+
+func (sink requestRecordCompressedSink) Write(data []byte) (int, error) {
+	sink.buffer.store(data)
+	return len(data), nil
+}
+
+func (b *requestRecordBuffer) store(data []byte) {
+	n := min(len(data), b.limit-len(b.data))
+	if n > 0 && requestRecordMemory.Add(int64(n)) <= 128<<20 {
+		b.data = append(b.data, data[:n]...)
+	} else if n > 0 {
+		requestRecordMemory.Add(-int64(n))
+		n = 0
+	}
+	if n != len(data) {
+		b.truncated = true
+	}
+}
+
+func (b *requestRecordBuffer) enableStream() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.written != 0 || b.compressed {
+		return
+	}
+	b.compressed = true
+	b.compressor = gzip.NewWriter(requestRecordCompressedSink{buffer: b})
 }
 
 func (b *requestRecordBuffer) Write(data []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.written += int64(len(data))
-	n := min(len(data), b.limit-len(b.data))
-	if n > 0 {
-		if requestRecordMemory.Add(int64(n)) <= 128<<20 {
-			b.data = append(b.data, data[:n]...)
-		} else {
-			requestRecordMemory.Add(-int64(n))
+	if b.compressed {
+		if _, err := b.compressor.Write(data); err != nil {
+			b.truncated = true
 		}
+	} else {
+		b.store(data)
 	}
 	return len(data), nil
 }
@@ -53,12 +87,18 @@ type requestRecordWriter struct {
 }
 
 func (w *requestRecordWriter) Write(data []byte) (int, error) {
+	if strings.HasPrefix(strings.ToLower(w.Header().Get("Content-Type")), "text/event-stream") {
+		w.buffer.enableStream()
+	}
 	n, err := w.ResponseWriter.Write(data)
 	_, _ = w.buffer.Write(data[:n])
 	return n, err
 }
 
 func (w *requestRecordWriter) WriteString(data string) (int, error) {
+	if strings.HasPrefix(strings.ToLower(w.Header().Get("Content-Type")), "text/event-stream") {
+		w.buffer.enableStream()
+	}
 	n, err := w.ResponseWriter.WriteString(data)
 	_, _ = w.buffer.Write([]byte(data[:n]))
 	return n, err
@@ -218,6 +258,9 @@ func CaptureRequestRecordUpstream(c *gin.Context, req *http.Request) func(*http.
 			return
 		}
 		buffer := &requestRecordBuffer{limit: capture.limit}
+		if strings.HasPrefix(strings.ToLower(response.Header.Get("Content-Type")), "text/event-stream") {
+			buffer.enableStream()
+		}
 		capture.mu.Lock()
 		capture.snapshots = append(capture.snapshots, requestRecordRawSnapshot{Stage: "upstream_response", ContentType: response.Header.Get("Content-Type"), Buffer: buffer, Attempt: attempt, Status: response.StatusCode})
 		capture.mu.Unlock()
@@ -239,17 +282,23 @@ func (capture *requestRecordCapture) detach() *requestRecordJob {
 	job := &requestRecordJob{record: capture.record}
 	for _, raw := range capture.snapshots {
 		raw.Buffer.mu.Lock()
+		if raw.Buffer.compressor != nil {
+			if err := raw.Buffer.compressor.Close(); err != nil {
+				raw.Buffer.truncated = true
+			}
+		}
 		// Ownership moves to the worker; no Gin context, reader or pooled body
 		// storage escapes the request lifetime.
 		data := bytes.Clone(raw.Buffer.data)
 		job.bytes += int64(len(data))
 		requestRecordMemory.Add(-int64(len(raw.Buffer.data)))
 		raw.Buffer.data = nil
-		truncated := raw.Buffer.written > int64(len(data))
+		truncated := raw.Buffer.truncated || (!raw.Buffer.compressed && raw.Buffer.written > int64(len(data)))
+		compressed := raw.Buffer.compressed
 		raw.Buffer.limit = 0
 		raw.Buffer.mu.Unlock()
 		contentType, params, _ := mime.ParseMediaType(raw.ContentType)
-		job.snapshots = append(job.snapshots, requestRecordInput{Stage: raw.Stage, ContentType: contentType, Boundary: params["boundary"], Data: data, Truncated: truncated, Attempt: raw.Attempt, Status: raw.Status})
+		job.snapshots = append(job.snapshots, requestRecordInput{Stage: raw.Stage, ContentType: contentType, Boundary: params["boundary"], Data: data, Truncated: truncated, Compressed: compressed, Attempt: raw.Attempt, Status: raw.Status})
 	}
 	return job
 }

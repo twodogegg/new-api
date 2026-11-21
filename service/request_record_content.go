@@ -1,7 +1,9 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -56,6 +58,7 @@ type requestRecordInput struct {
 	Boundary    string
 	Data        []byte
 	Truncated   bool
+	Compressed  bool
 	Attempt     int
 	Status      int
 }
@@ -281,19 +284,44 @@ func (content *requestRecordContent) downloadMedia(address, path string) (any, e
 func (content *requestRecordContent) decode(input requestRecordInput) (any, string) {
 	content.stage = input.Stage
 	if input.ContentType == "text/event-stream" {
-		events := make([]any, 0)
-		blocks := strings.Split(strings.ReplaceAll(string(input.Data), "\r\n", "\n"), "\n\n")
-		if input.Truncated && len(blocks) > 0 {
-			blocks = blocks[:len(blocks)-1]
-		}
-		for _, block := range blocks {
-			if len(events) >= 10000 {
-				content.record.BodyState = "truncated"
-				break
+		var reader io.Reader = bytes.NewReader(input.Data)
+		if input.Compressed {
+			compressed, err := gzip.NewReader(reader)
+			if err != nil {
+				return nil, "truncated"
 			}
+			defer compressed.Close()
+			reader = compressed
+		}
+		// Bound a corrupt or adversarial compressed stream, not ordinary SSE framing.
+		limited := &io.LimitedReader{R: reader, N: 128 << 20}
+		state := "available"
+		events := func(yield func(any) bool) {
+			scanner := bufio.NewScanner(limited)
+			scanner.Buffer(make([]byte, 4096), content.limit)
 			var name string
 			var data []string
-			for line := range strings.SplitSeq(block, "\n") {
+			emit := func() bool {
+				payload := strings.Join(data, "\n")
+				if payload == "" || payload == "[DONE]" || !gjson.Valid(payload) {
+					return true
+				}
+				value := gjson.Parse(payload)
+				if name == "error" || value.Get("error").Exists() || value.Get("type").String() == "error" {
+					content.record.Status = "failed"
+				}
+				var event any
+				return common.Unmarshal([]byte(payload), &event) != nil || yield(event)
+			}
+			for scanner.Scan() {
+				line := scanner.Text()
+				if line == "" {
+					if !emit() {
+						return
+					}
+					name, data = "", nil
+					continue
+				}
 				field, value, _ := strings.Cut(line, ":")
 				value = strings.TrimPrefix(value, " ")
 				if field == "event" {
@@ -302,20 +330,17 @@ func (content *requestRecordContent) decode(input requestRecordInput) (any, stri
 					data = append(data, value)
 				}
 			}
-			payload := strings.Join(data, "\n")
-			if payload == "" || payload == "[DONE]" {
-				continue
+			if scanner.Err() != nil || limited.N == 0 {
+				state = "truncated"
+			} else if !input.Truncated {
+				emit()
 			}
-			if !gjson.Valid(payload) {
-				continue
-			}
-			value := gjson.Parse(payload)
-			if name == "error" || value.Get("error").Exists() || value.Get("type").String() == "error" {
-				content.record.Status = "failed"
-			}
-			events = append(events, map[string]any{"event": name, "data": content.normalize(value, "/events/"+strconv.Itoa(len(events)), 0)})
 		}
-		return requestRecordMergedStream(events), "available"
+		merged, err := common.Marshal(requestRecordMergedStream(events))
+		if err != nil {
+			return nil, "not_captured"
+		}
+		return content.normalize(gjson.ParseBytes(merged), "", 0), state
 	}
 	if input.Truncated {
 		return nil, "truncated"
@@ -487,17 +512,7 @@ func requestRecordApplyClaudeEvent(data map[string]any, choice *requestRecordStr
 // result. Storing every delta would make a request record enormous, so the
 // snapshot keeps the assembled assistant reply (content, reasoning and tool
 // calls) and never the per-chunk wire frames.
-func requestRecordMergedStream(events []any) any {
-	// A completed Responses API event already carries the full response.
-	for _, item := range events {
-		data := requestRecordValueMap(requestRecordValueMap(item)["data"])
-		switch requestRecordValueString(data["type"]) {
-		case "response.completed", "response.incomplete":
-			if response := requestRecordValueMap(data["response"]); response != nil {
-				return response
-			}
-		}
-	}
+func requestRecordMergedStream(events func(func(any) bool)) any {
 	choices := make(map[int]*requestRecordStreamChoice)
 	order := make([]int, 0)
 	getChoice := func(index int) *requestRecordStreamChoice {
@@ -511,10 +526,15 @@ func requestRecordMergedStream(events []any) any {
 	}
 	var id, model string
 	var usage any
-	for _, item := range events {
-		data := requestRecordValueMap(requestRecordValueMap(item)["data"])
+	for item := range events {
+		data := requestRecordValueMap(item)
 		if data == nil {
 			continue
+		}
+		if kind := requestRecordValueString(data["type"]); kind == "response.completed" || kind == "response.incomplete" {
+			if response := requestRecordValueMap(data["response"]); response != nil {
+				return response
+			}
 		}
 		if value := requestRecordValueString(data["id"]); value != "" {
 			id = value

@@ -108,6 +108,7 @@ func (job *requestRecordJob) persist() error {
 	}
 	saved := false
 	for _, input := range job.snapshots {
+		content.nodes = 0
 		body, state := content.decode(input)
 		snapshot := RequestRecordSnapshot{Stage: input.Stage, ContentType: input.ContentType, Attempt: input.Attempt, Status: input.Status, State: state}
 		if input.Truncated {
