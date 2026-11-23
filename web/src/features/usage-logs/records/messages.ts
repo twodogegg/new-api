@@ -31,12 +31,7 @@ export function recordObject(value: unknown): Record<string, unknown> {
 export function formatToolPayload(text: string): string {
   const raw = text.trim()
   if (!raw) return text
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return text
-  }
+  const parsed = parseToolPayload(raw)
   if (parsed === null || typeof parsed !== 'object') return text
   return JSON.stringify(parsed, null, 2).replaceAll(
     /\\r\\n|\\n|\\t|\\\\/g,
@@ -46,6 +41,22 @@ export function formatToolPayload(text: string): string {
       return '\n'
     }
   )
+}
+
+// Models occasionally append stray closing brackets after a complete JSON
+// value. Retry without them so the payload still reads as formatted JSON
+// instead of one long line; anything else falls back to the raw text.
+function parseToolPayload(raw: string): unknown {
+  let candidate = raw
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return JSON.parse(candidate)
+    } catch {
+      if (!/[}\]]$/.test(candidate)) return undefined
+      candidate = candidate.slice(0, -1).trimEnd()
+    }
+  }
+  return undefined
 }
 
 function recordText(value: unknown): string {

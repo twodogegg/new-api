@@ -290,6 +290,14 @@ describe('request record reading', () => {
     expect(formatToolPayload('{"truncated":')).toBe('{"truncated":')
   })
 
+  test('still formats a payload with a stray trailing brace', () => {
+    expect(
+      formatToolPayload('{"assets":[{"kind":"character"}],"notes":"done"}}')
+    ).toBe(
+      '{\n  "assets": [\n    {\n      "kind": "character"\n    }\n  ],\n  "notes": "done"\n}'
+    )
+  })
+
   test('accepts missing or unrecognized content without inventing an assistant response', () => {
     expect(
       requestRecordMessages({
